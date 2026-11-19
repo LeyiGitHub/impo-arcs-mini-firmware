@@ -1,0 +1,679 @@
+{
+  "about": "Every board the Impo Gadget SDK builds for. hardware/render.py writes the README gallery from this file; impo.ai/hardware takes its supported boards from it. status: ready = builds, flashes and pairs; experimental = works with gaps the docs name. flash = the name for esp32/tools/flash.sh (ESP32 boards).",
+  "categories": [
+    {
+      "id": "robotics",
+      "title": "Robots"
+    },
+    {
+      "id": "displays",
+      "title": "Screens and desk companions"
+    },
+    {
+      "id": "handheld",
+      "title": "Pocket and wearable"
+    },
+    {
+      "id": "epaper",
+      "title": "E-paper"
+    },
+    {
+      "id": "voice",
+      "title": "Voice"
+    },
+    {
+      "id": "boards",
+      "title": "Dev boards and Linux"
+    }
+  ],
+  "boards": [
+    {
+      "id": "espressif-sparkbot",
+      "name": "ESP-SparkBot",
+      "vendor": "Espressif",
+      "category": "robotics",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "sparkbot",
+      "highlights": [
+        "Drives",
+        "Camera",
+        "Voice",
+        "Motion sensor"
+      ],
+      "display": "240×240 LCD",
+      "memory": "16 MB / 8 MB",
+      "link": "https://github.com/78/xiaozhi-esp32/tree/main/main/boards/espressif/esp-sparkbot"
+    },
+    {
+      "id": "freenove-4wd-car",
+      "name": "4WD Car Kit (FNK0053)",
+      "vendor": "Freenove",
+      "category": "robotics",
+      "chip": "ESP32",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "freenove-4wd-car",
+      "highlights": [
+        "Drives",
+        "Camera",
+        "Distance sensor",
+        "Turning head"
+      ],
+      "display": "None",
+      "memory": "4 MB / 8 MB",
+      "link": "https://github.com/Freenove/Freenove_4WD_Car_Kit_for_ESP32",
+      "note": "Back up Freenove's firmware and erase NVS first (esp32/devices/README.md)."
+    },
+    {
+      "id": "arcs-mini-v2-1",
+      "name": "ARCS-MINI V2.1 robot dog",
+      "vendor": "ListenAI",
+      "category": "robotics",
+      "chip": "ARCS LS26xx",
+      "status": "ready",
+      "sdk": "arcs",
+      "highlights": [
+        "Walks",
+        "Tricks",
+        "Voice",
+        "Motion sensor"
+      ],
+      "display": "Status light",
+      "memory": "",
+      "link": "arcs/README.md"
+    },
+    {
+      "id": "m5stack-stackchan",
+      "name": "StackChan",
+      "vendor": "M5Stack",
+      "category": "robotics",
+      "chip": "ESP32-S3",
+      "status": "experimental",
+      "sdk": "esp32",
+      "flash": "cores3",
+      "highlights": [
+        "Voice",
+        "Screen"
+      ],
+      "display": "2\" 320×240 LCD, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://shop.m5stack.com/products/stackchan-kawaii-co-created-open-source-ai-desktop-robot",
+      "note": "Runs the CoreS3 build: screen, voice and pairing. Its head servos and head touch are not driven yet."
+    },
+    {
+      "id": "m5stack-cores3",
+      "name": "CoreS3",
+      "vendor": "M5Stack",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "cores3",
+      "highlights": [
+        "Voice",
+        "Touch",
+        "Images",
+        "Battery"
+      ],
+      "display": "2\" 320×240 LCD, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://docs.m5stack.com/en/core/CoreS3"
+    },
+    {
+      "id": "m5stack-core2",
+      "name": "Core2",
+      "vendor": "M5Stack",
+      "category": "displays",
+      "chip": "ESP32",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "core2",
+      "highlights": [
+        "Voice",
+        "Touch",
+        "Images",
+        "Battery"
+      ],
+      "display": "2\" 320×240 LCD, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://docs.m5stack.com/en/core/Core2"
+    },
+    {
+      "id": "espressif-box-3",
+      "name": "ESP32-S3-BOX-3",
+      "vendor": "Espressif",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "box3",
+      "highlights": [
+        "Voice",
+        "Touch",
+        "Images",
+        "Home tunnel"
+      ],
+      "display": "2.4\" 320×240 LCD, touch",
+      "memory": "16 MB / 16 MB",
+      "link": "https://www.espressif.com/en/products/devkits/esp32-s3-box-3"
+    },
+    {
+      "id": "waveshare-s3-175c",
+      "name": "ESP32-S3-Touch-AMOLED-1.75C",
+      "vendor": "Waveshare",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "s3",
+      "highlights": [
+        "Voice",
+        "Round AMOLED",
+        "Touch",
+        "Battery"
+      ],
+      "display": "1.75\" 466×466 round AMOLED, touch",
+      "memory": "32 MB / 8 MB",
+      "link": "https://www.waveshare.com/esp32-s3-touch-amoled-1.75c.htm"
+    },
+    {
+      "id": "waveshare-s3-175",
+      "name": "ESP32-S3-Touch-AMOLED-1.75",
+      "vendor": "Waveshare",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "s3n",
+      "highlights": [
+        "Voice",
+        "Round AMOLED",
+        "Touch",
+        "Battery"
+      ],
+      "display": "1.75\" 466×466 round AMOLED, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://www.waveshare.com/esp32-s3-touch-amoled-1.75.htm"
+    },
+    {
+      "id": "waveshare-s3-216",
+      "name": "ESP32-S3-Touch-AMOLED-2.16",
+      "vendor": "Waveshare",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "s3-216",
+      "highlights": [
+        "Voice",
+        "AMOLED",
+        "Touch",
+        "Battery"
+      ],
+      "display": "2.16\" 480×480 AMOLED, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm"
+    },
+    {
+      "id": "sensecap-watcher",
+      "name": "SenseCAP Watcher",
+      "vendor": "Seeed Studio",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "watcher",
+      "highlights": [
+        "Voice",
+        "Round touch screen",
+        "Scroll wheel",
+        "Battery"
+      ],
+      "display": "1.45\" 412×412 round LCD, touch",
+      "memory": "32 MB / 8 MB",
+      "link": "https://www.seeedstudio.com/SenseCAP-Watcher-W1-A-p-5979.html"
+    },
+    {
+      "id": "aipi-lite",
+      "name": "AIPI Lite",
+      "vendor": "XOrigin",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "aipi",
+      "highlights": [
+        "Voice",
+        "Images",
+        "Battery"
+      ],
+      "display": "128×128 LCD",
+      "memory": "16 MB / 8 MB",
+      "link": "https://github.com/78/xiaozhi-esp32/tree/main/main/boards/xorigin/aipi-lite"
+    },
+    {
+      "id": "guition-jc3248w535",
+      "name": "JC3248W535",
+      "vendor": "Guition",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "jc3248w535",
+      "highlights": [
+        "3.5\" touch screen",
+        "Speaker",
+        "Images"
+      ],
+      "display": "3.5\" 320×480 IPS LCD, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://github.com/sirisakG2/JC3248W535C"
+    },
+    {
+      "id": "waveshare-s3-lcd7",
+      "name": "ESP32-S3-Touch-LCD-7",
+      "vendor": "Waveshare",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "lcd7",
+      "highlights": [
+        "7\" touch screen",
+        "Images"
+      ],
+      "display": "7\" 800×480 RGB LCD, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://www.waveshare.com/esp32-s3-touch-lcd-7.htm"
+    },
+    {
+      "id": "freenove-fnk0104b",
+      "name": "ESP32-S3 Display (FNK0104B)",
+      "vendor": "Freenove",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "fnk0104b",
+      "highlights": [
+        "Voice",
+        "Touch",
+        "Images"
+      ],
+      "display": "2.8\" 240×320 LCD, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://github.com/Freenove/Freenove_ESP32_S3_Display"
+    },
+    {
+      "id": "vn-s3-183",
+      "name": "ESP32-S3 1.83\" NV3023",
+      "vendor": "xiaozhi Vietnam",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "vn183",
+      "highlights": [
+        "Voice",
+        "Images",
+        "Battery"
+      ],
+      "display": "1.83\" 284×240 LCD",
+      "memory": "16 MB / 8 MB",
+      "link": "https://github.com/TienHuyIoT/xiaozhi-esp32_vietnam"
+    },
+    {
+      "id": "sensecap-indicator",
+      "name": "SenseCAP Indicator",
+      "vendor": "Seeed Studio",
+      "category": "displays",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "sensecap-indicator",
+      "highlights": [
+        "4\" screen",
+        "Air sensors",
+        "Images"
+      ],
+      "display": "4\" 480×480 LCD",
+      "memory": "8 MB / 8 MB",
+      "link": "https://www.seeedstudio.com/SenseCAP-Indicator-D1-p-5643.html"
+    },
+    {
+      "id": "ideaspark-esp32-19",
+      "name": "ESP32 with 1.9\" display",
+      "vendor": "ideaspark",
+      "category": "displays",
+      "chip": "ESP32",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "ideaspark",
+      "highlights": [
+        "Status screen",
+        "Images"
+      ],
+      "display": "1.9\" 170×320 LCD",
+      "memory": "16 MB / none",
+      "link": "https://www.amazon.com/s?k=ideaspark+ESP32+1.9+inch+ST7789"
+    },
+    {
+      "id": "waveshare-c6-lcd-147",
+      "name": "ESP32-C6-LCD-1.47",
+      "vendor": "Waveshare",
+      "category": "displays",
+      "chip": "ESP32-C6",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "waveshare-c6-lcd-147",
+      "highlights": [
+        "Status screen",
+        "Images"
+      ],
+      "display": "1.47\" 172×320 LCD",
+      "memory": "4 MB / none",
+      "link": "https://www.waveshare.com/esp32-c6-lcd-1.47.htm"
+    },
+    {
+      "id": "m5stack-sticks3",
+      "name": "StickS3",
+      "vendor": "M5Stack",
+      "category": "handheld",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "sticks3",
+      "highlights": [
+        "Voice",
+        "Images",
+        "Battery"
+      ],
+      "display": "1.14\" 135×240 LCD",
+      "memory": "8 MB / 8 MB",
+      "link": "https://shop.m5stack.com/products/m5sticks3-esp32s3-mini-iot-dev-kit"
+    },
+    {
+      "id": "m5stack-stickc-plus2",
+      "name": "StickC Plus2",
+      "vendor": "M5Stack",
+      "category": "handheld",
+      "chip": "ESP32",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "plus2",
+      "highlights": [
+        "Push-to-talk",
+        "Images",
+        "Battery"
+      ],
+      "display": "1.14\" 135×240 LCD",
+      "memory": "8 MB / 2 MB",
+      "link": "https://shop.m5stack.com/products/m5stickc-plus2-esp32-mini-iot-development-kit"
+    },
+    {
+      "id": "m5stack-stopwatch",
+      "name": "StopWatch",
+      "vendor": "M5Stack",
+      "category": "handheld",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "stopwatch",
+      "highlights": [
+        "Voice",
+        "Round AMOLED",
+        "Touch",
+        "Battery"
+      ],
+      "display": "1.75\" 466×466 round AMOLED, touch",
+      "memory": "16 MB / 8 MB",
+      "link": "https://docs.m5stack.com/en/core/StopWatch"
+    },
+    {
+      "id": "waveshare-c6-206",
+      "name": "ESP32-C6-Touch-AMOLED-2.06",
+      "vendor": "Waveshare",
+      "category": "handheld",
+      "chip": "ESP32-C6",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "c6-206",
+      "highlights": [
+        "Watch",
+        "Voice notes",
+        "Touch",
+        "Battery"
+      ],
+      "display": "2.06\" 410×502 AMOLED, touch",
+      "memory": "16 MB / none",
+      "link": "https://www.waveshare.com/esp32-c6-touch-amoled-2.06.htm"
+    },
+    {
+      "id": "waveshare-c6-18",
+      "name": "ESP32-C6-Touch-AMOLED-1.8",
+      "vendor": "Waveshare",
+      "category": "handheld",
+      "chip": "ESP32-C6",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "c6",
+      "highlights": [
+        "Voice notes",
+        "AMOLED",
+        "Touch",
+        "Battery"
+      ],
+      "display": "1.8\" 368×448 AMOLED, touch",
+      "memory": "16 MB / none",
+      "link": "https://www.waveshare.com/esp32-c6-touch-amoled-1.8.htm"
+    },
+    {
+      "id": "m5stack-cardputer-adv",
+      "name": "Cardputer ADV",
+      "vendor": "M5Stack",
+      "category": "handheld",
+      "chip": "ESP32-S3",
+      "status": "experimental",
+      "sdk": "esp32",
+      "flash": "cardputer-adv",
+      "highlights": [
+        "Keyboard",
+        "Voice notes"
+      ],
+      "display": "1.14\" 240×135 LCD",
+      "memory": "8 MB / none",
+      "link": "https://docs.m5stack.com/en/core/Cardputer-Adv"
+    },
+    {
+      "id": "folotoy-ai-passport",
+      "name": "AI Passport",
+      "vendor": "FoloToy",
+      "category": "handheld",
+      "chip": "ESP32-C3",
+      "status": "experimental",
+      "sdk": "esp32",
+      "flash": "ai-passport",
+      "highlights": [
+        "Voice notes",
+        "Screen"
+      ],
+      "display": "240×320 LCD",
+      "memory": "8 MB / none",
+      "link": "https://ai-passport.folotoy.cn/en/"
+    },
+    {
+      "id": "reterminal-e1001",
+      "name": "reTerminal E1001",
+      "vendor": "Seeed Studio",
+      "category": "epaper",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "reterminal-e1001",
+      "highlights": [
+        "7.5\" e-paper",
+        "Images",
+        "Temperature and humidity"
+      ],
+      "display": "7.5\" 800×480 black and white e-paper",
+      "memory": "32 MB / 8 MB",
+      "link": "https://www.seeedstudio.com/reTerminal-E1001-p-6534.html"
+    },
+    {
+      "id": "reterminal-e1002",
+      "name": "reTerminal E1002",
+      "vendor": "Seeed Studio",
+      "category": "epaper",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "reterminal-e1002",
+      "highlights": [
+        "Six-colour e-paper",
+        "Images",
+        "Temperature and humidity"
+      ],
+      "display": "7.3\" 800×480 six-colour e-paper",
+      "memory": "32 MB / 8 MB",
+      "link": "https://www.seeedstudio.com/reTerminal-E1002-p-6533.html"
+    },
+    {
+      "id": "xteink-x4",
+      "name": "X4",
+      "vendor": "Xteink",
+      "category": "epaper",
+      "chip": "ESP32-C3",
+      "status": "experimental",
+      "sdk": "esp32",
+      "flash": "xteink-x4",
+      "highlights": [
+        "4.26\" e-paper",
+        "Images"
+      ],
+      "display": "4.26\" 480×800 black and white e-paper",
+      "memory": "16 MB / none",
+      "link": "esp32/devices/XTEINK_X4.md",
+      "note": "Keeps Xteink's bootloader and app; read esp32/devices/XTEINK_X4.md first."
+    },
+    {
+      "id": "home-assistant-voice",
+      "name": "Voice Preview Edition",
+      "vendor": "Home Assistant",
+      "category": "voice",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "home-assistant-voice",
+      "highlights": [
+        "Voice",
+        "LED ring",
+        "Dial"
+      ],
+      "display": "12-LED ring",
+      "memory": "16 MB / 8 MB",
+      "link": "https://www.home-assistant.io/voice-pe/"
+    },
+    {
+      "id": "seeed-respeaker-lite",
+      "name": "reSpeaker Lite",
+      "vendor": "Seeed Studio",
+      "category": "voice",
+      "chip": "ESP32-S3",
+      "status": "experimental",
+      "sdk": "esp32",
+      "flash": "seeed-respeaker-lite",
+      "highlights": [
+        "Voice"
+      ],
+      "display": "RGB LED",
+      "memory": "8 MB / 8 MB",
+      "link": "https://wiki.seeedstudio.com/xiao_respeaker/"
+    },
+    {
+      "id": "espressif-c5-devkitc-1",
+      "name": "ESP32-C5-DevKitC-1",
+      "vendor": "Espressif",
+      "category": "boards",
+      "chip": "ESP32-C5",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "devkit",
+      "highlights": [
+        "Status light",
+        "Home tunnel"
+      ],
+      "display": "RGB status light",
+      "memory": "8 MB / 8 MB",
+      "link": "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c5/esp32-c5-devkitc-1/index.html"
+    },
+    {
+      "id": "espressif-s3-devkitc-1",
+      "name": "ESP32-S3-DevKitC-1",
+      "vendor": "Espressif",
+      "category": "boards",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "espressif-s3-devkitc-1",
+      "highlights": [
+        "Status light",
+        "Home tunnel"
+      ],
+      "display": "RGB status light",
+      "memory": "8 MB / 8 MB",
+      "link": "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/user_guide_v1.1.html"
+    },
+    {
+      "id": "seeed-xiao-esp32s3",
+      "name": "XIAO ESP32-S3",
+      "vendor": "Seeed Studio",
+      "category": "boards",
+      "chip": "ESP32-S3",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "seeed-xiao-esp32s3",
+      "highlights": [
+        "Thumb-sized",
+        "Home tunnel"
+      ],
+      "display": "None",
+      "memory": "8 MB / 8 MB",
+      "link": "https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/"
+    },
+    {
+      "id": "espressif-c6-devkitc-1",
+      "name": "ESP32-C6-DevKitC-1",
+      "vendor": "Espressif",
+      "category": "boards",
+      "chip": "ESP32-C6",
+      "status": "ready",
+      "sdk": "esp32",
+      "flash": "c6-nopsram",
+      "highlights": [
+        "Status light"
+      ],
+      "display": "RGB status light",
+      "memory": "8 MB / none",
+      "link": "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32c6/esp32-c6-devkitc-1/user_guide.html"
+    },
+    {
+      "id": "raspberry-pi-5",
+      "name": "Raspberry Pi",
+      "vendor": "Raspberry Pi",
+      "category": "boards",
+      "chip": "3B+, 4, 5, Zero 2 W",
+      "status": "ready",
+      "sdk": "linux",
+      "highlights": [
+        "Linux",
+        "Your own commands",
+        "Home Assistant"
+      ],
+      "display": "Any",
+      "memory": "",
+      "link": "linux/README.md"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: MIT
+#
+# Seeed Studio XIAO ESP32-S3 (the plain board, not the Sense with a camera):
+# an ESP32-S3R8, with 8 MB of octal PSRAM in the package, and 8 MB of flash.
+# Its USB-C port is the S3's own USB-Serial-JTAG (303a:1001), which is both
+# the console and the flashing port. Load last, after sdkconfig.defaults (see
+# README.md in this directory).
+#
+# Sources: Seeed's wiki, https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/
+# (chip, memory and pin map: BOOT on GPIO0, the orange user LED on GPIO21,
+# lit when the pin is low) and https://wiki.seeedstudio.com/xiao_esp32s3_pin_multiplexing/.
+# The USB device, the PSRAM and the GigaDevice flash (c8:4017) were read from
+# a board with esptool, and Seeed's own firmware boots in DIO mode.
+#
+# A Link gadget with no status light: the user LED has one colour, so it
+# can't tell setup from a pending pairing confirmation, and it isn't used.
+# Follow setup in the Impo app or in the serial log. Attach the U.FL antenna
+# that comes with the board: Wi-Fi and BLE are weak without it.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# No status light (see above).
+CONFIG_HOMEHUB_LED_BACKEND_NONE=y
+# BOOT button, active low: a press confirms pairing, a 5 s hold resets setup.
+CONFIG_HOMEHUB_BUTTON_GPIO=0
+
+# 8 MB flash, in DIO mode like Seeed's own firmware.
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+
+# Octal PSRAM holds the TLS buffers and keeps the home-network tunnel on.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_MODE_QUAD=n
+CONFIG_SPIRAM_SPEED_80M=y
+
+# The board has no USB-UART bridge: the console is the USB-C port.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# The BLE controller already takes ~70 KB of internal RAM on the S3; keep the
+# NimBLE host's allocations in PSRAM so pairing has room.
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
