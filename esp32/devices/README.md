@@ -53,6 +53,7 @@ session to Impo. The rest depends on the hardware.
 | **M5Stack StickS3** | ESP32-S3 | 1.14" 135×240 LCD | 8 MB / 8 MB | [M5Stack docs](https://docs.m5stack.com/en/core/StickS3), [M5Unified](https://github.com/m5stack/M5Unified) | [M5Stack](https://shop.m5stack.com/products/m5sticks3-esp32s3-mini-iot-dev-kit) |
 | **M5Stack StopWatch** | ESP32-S3 | 1.75" 466×466 round AMOLED, touch | 16 MB / 8 MB | [M5Stack docs](https://docs.m5stack.com/en/core/StopWatch), [M5Unified](https://github.com/m5stack/M5Unified), [factory firmware](https://github.com/m5stack/M5StopWatch-UserDemo) | — |
 | **M5Stack CoreS3** | ESP32-S3 | 2" 320×240 LCD, touch | 16 MB / 8 MB | [M5Stack docs](https://docs.m5stack.com/en/core/CoreS3), [Espressif BSP](https://github.com/espressif/esp-bsp/tree/master/bsp/m5stack_core_s3) | — |
+| **M5Stack StackChan** | ESP32-S3 (a CoreS3) | 2" 320×240 LCD, touch | 16 MB / 8 MB | [StackChan firmware](https://github.com/m5stack/StackChan), [StackChan BSP](https://github.com/m5stack/StackChan-BSP) | [M5Stack](https://shop.m5stack.com/products/stackchan-kawaii-co-created-open-source-ai-desktop-robot) |
 | **Guition JC3248W535** | ESP32-S3 | 3.5" 320×480 IPS LCD, touch | 16 MB / 8 MB | [JC3248W535C notes](https://github.com/sirisakG2/JC3248W535C), [JC3248W535-Driver](https://github.com/me-processware/JC3248W535-Driver) | — |
 | **Waveshare ESP32-S3-Touch-LCD-7** | ESP32-S3 | 7" 800×480 RGB LCD, touch | 16 MB / 8 MB | [Waveshare wiki](https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-7), [GitHub](https://github.com/waveshareteam/ESP32-S3-Touch-LCD-7) | [Waveshare](https://www.waveshare.com/esp32-s3-touch-lcd-7.htm) |
 | **Xteink X4 (experimental, SSD1677)** | ESP32-C3 | 4.26" 480×800 black and white e-paper | 16 MB / none | [Port and recovery notes](XTEINK_X4.md) | — |
@@ -65,19 +66,19 @@ session to Impo. The rest depends on the hardware.
 
 ## Features
 
-| | DevKitC-1 | C6 devkit | ideaspark | Waveshare C6 LCD 1.47 | SenseCAP Indicator | reTerminal E1001 | reTerminal E1002 | HA Voice PE | reSpeaker Lite (experimental) | Waveshare S3 1.75C | Waveshare S3 1.75 | Waveshare S3 2.16 | ESP-SparkBot | AIPI Lite | Waveshare C6 1.8 | Waveshare C6 2.06 | Watcher | StickS3 | StickC Plus2 | Cardputer ADV | BOX-3 | StopWatch | CoreS3 | Core2 | FNK0104B | S3 DevKitC-1 | JC3248W535 | VN S3 1.83-inch | Waveshare LCD7 | AI Passport | Xteink X4 | Freenove 4WD car | XIAO ESP32-S3 |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:| :-: | :-: | :-: |
-| Home-network tunnel | ✅ | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | — | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | — | ✅ |
-| Shows status on | Light | Light | Screen | Screen | Screen | E-paper | E-paper | Light ring | RGB LED | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Light | Avatar | Avatar | Avatar | Avatar | E-paper | Nothing yet | Nothing yet |
-| Images from Impo | — | — | ✅ | ✅ | ✅ | Black and white | Six colours | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | — | Black and white | — | — |
-| UI and settings | — | — | — | — | — | — | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Experimental | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | Experimental | — | — | — |
-| Push-to-talk | — | — | — | — | — | — | — | ✅ | XIAO BOOT | ✅ | ✅ | ✅ | ✅ | ✅ | Text replies | Text replies | ✅ | ✅ | ✅ | Text replies (experimental) | ✅ | ✅ | ✅ | ✅ | ✅ | — | With an added I2S mic | ✅ | — | Text replies (experimental) | — | — | — |
-| Speaker and mic | — | — | — | — | — | — | — | ✅ | 16 kHz I2S | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Buzzer and mic | ES8311 (experimental) | ✅ | ✅ | ✅ | ✅ | ES8311 | — | Speaker (NS4168), no mic | ES8311, ES7210 | — | ES8311 (experimental) | — | — | — |
-| Air sensors | — | — | — | — | D1S, D1Pro | Temperature, humidity | Temperature, humidity | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| Touch | — | — | — | — | — | — | — | — | — | ✅ | ✅ | ✅ | — | — | ✅ | ✅ | ✅ | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — | — | — | — |
-| Battery status | — | — | — | — | — | — | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Voltage only | — | — | ✅ | ✅ | ✅ | Voltage only | — | — | Percent only | — | No charging state | — | No charging state | — |
-| Over-the-air updates | Off | Off | Off | Off | Off | Off | Off | Off | Off | On | On | On | On | On | On | On | On | On | On | Off | On | On | On | On | On | Off | On | On | On | Off | Off | Off | Off |
-| Buttons | BOOT | BOOT | BOOT | BOOT | Top | Green | Green | Centre (talk), dial | XIAO BOOT (talk/setup) | PWR (talk), BOOT | BOOT (talk), PWR | BOOT, PWR (talk), KEY (talk) on top | Top pad (talk), side pads (menu), BOOT (talk) | Two | BOOT (talk), PWR | BOOT (talk), PWR | Wheel (press to talk, turn to sleep) | Front (talk), side (menu), PWR | Front (talk), side (menu), PWR | GO/Space (talk), Esc/Enter/arrows (menu) | BOOT/CONFIG (talk) | Yellow (talk), blue (sleep), PWR | PWR (talk), RST | Touch BtnB (talk), PWR | BOOT (talk) | BOOT | BOOT (talk) | BOOT (talk), Vol+/Vol- (menu) | BOOT (flash only) | OK (talk), UP/DOWN (menu) | Confirm (setup) | BOOT (setup) | BOOT (setup) |
+| | DevKitC-1 | C6 devkit | ideaspark | Waveshare C6 LCD 1.47 | SenseCAP Indicator | reTerminal E1001 | reTerminal E1002 | HA Voice PE | reSpeaker Lite (experimental) | Waveshare S3 1.75C | Waveshare S3 1.75 | Waveshare S3 2.16 | ESP-SparkBot | AIPI Lite | Waveshare C6 1.8 | Waveshare C6 2.06 | Watcher | StickS3 | StickC Plus2 | Cardputer ADV | BOX-3 | StopWatch | CoreS3 | StackChan | Core2 | FNK0104B | S3 DevKitC-1 | JC3248W535 | VN S3 1.83-inch | Waveshare LCD7 | AI Passport | Xteink X4 | Freenove 4WD car | XIAO ESP32-S3 |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:| :-: | :-: | :-: |
+| Home-network tunnel | ✅ | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | — | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | — | ✅ |
+| Shows status on | Light | Light | Screen | Screen | Screen | E-paper | E-paper | Light ring | RGB LED | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Avatar | Light | Avatar | Avatar | Avatar | Avatar | E-paper | Nothing yet | Nothing yet |
+| Images from Impo | — | — | ✅ | ✅ | ✅ | Black and white | Six colours | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | — | — | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | — | Black and white | — | — |
+| UI and settings | — | — | — | — | — | — | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Experimental | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ | Experimental | — | — | — |
+| Push-to-talk | — | — | — | — | — | — | — | ✅ | XIAO BOOT | ✅ | ✅ | ✅ | ✅ | ✅ | Text replies | Text replies | ✅ | ✅ | ✅ | Text replies (experimental) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | With an added I2S mic | ✅ | — | Text replies (experimental) | — | — | — |
+| Speaker and mic | — | — | — | — | — | — | — | ✅ | 16 kHz I2S | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Buzzer and mic | ES8311 (experimental) | ✅ | ✅ | ✅ | ✅ | ✅ | ES8311 | — | Speaker (NS4168), no mic | ES8311, ES7210 | — | ES8311 (experimental) | — | — | — |
+| Air sensors | — | — | — | — | D1S, D1Pro | Temperature, humidity | Temperature, humidity | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| Touch | — | — | — | — | — | — | — | — | — | ✅ | ✅ | ✅ | — | — | ✅ | ✅ | ✅ | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | ✅ | — | — | — | — |
+| Battery status | — | — | — | — | — | — | — | — | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Voltage only | — | — | ✅ | ✅ | ✅ | ✅ | Voltage only | — | — | Percent only | — | No charging state | — | No charging state | — |
+| Over-the-air updates | Off | Off | Off | Off | Off | Off | Off | Off | Off | On | On | On | On | On | On | On | On | On | On | Off | On | On | On | On | On | On | Off | On | On | On | Off | Off | Off | Off |
+| Buttons | BOOT | BOOT | BOOT | BOOT | Top | Green | Green | Centre (talk), dial | XIAO BOOT (talk/setup) | PWR (talk), BOOT | BOOT (talk), PWR | BOOT, PWR (talk), KEY (talk) on top | Top pad (talk), side pads (menu), BOOT (talk) | Two | BOOT (talk), PWR | BOOT (talk), PWR | Wheel (press to talk, turn to sleep) | Front (talk), side (menu), PWR | Front (talk), side (menu), PWR | GO/Space (talk), Esc/Enter/arrows (menu) | BOOT/CONFIG (talk) | Yellow (talk), blue (sleep), PWR | PWR (talk), RST | PWR (talk), RST | Touch BtnB (talk), PWR | BOOT (talk) | BOOT | BOOT (talk) | BOOT (talk), Vol+/Vol- (menu) | BOOT (flash only) | OK (talk), UP/DOWN (menu) | Confirm (setup) | BOOT (setup) | BOOT (setup) |
 Boards without PSRAM (the ideaspark, the C6 boards, the Cardputer ADV and the AI Passport) don't have room for
 the home-network tunnel. Impo can still reach and control them once the
 control session is up. The Waveshare C6, Cardputer ADV and AI Passport also can't hold their own voice
@@ -221,6 +222,28 @@ sensor, IMU, RTC, SD card and Grove ports aren't used yet. It enumerates as the
 chip's own USB serial port: `tools/impo/board.sh flash cores3`. If esptool
 can't connect, hold RST for 3 s, until the green LED lights, to enter the
 bootloader.
+
+The M5Stack StackChan is a CoreS3 on M5's robot body, and its build
+(`tools/impo/board.sh flash stackchan`) is the CoreS3's plus the body
+(`boards/stackchan_head.c`, following M5's own
+[StackChan firmware](https://github.com/m5stack/StackChan), MIT). Two Feetech
+SCS0009 servos on one 1 Mbit/s bus (UART1, GPIO6/7) turn the head (id 1, yaw,
+±120°) and tilt it (id 2, pitch, 3..85°): `head.look`, `head.nod`,
+`head.shake`, `head.center` and `head.status`. Moves are eased and the servos
+let go half a second after each one. A PY32 IO expander (I2C 0x6F) switches
+the servo power and drives the 12 RGB LEDs (`lights.set`, `lights.off`), an
+Si12T (0x68) reads the three touch zones along the top of the head (a pat or
+a stroke glows the LEDs pink and sends `head_touched`), and an INA226 (0x41)
+measures the body's battery. The CoreS3's AW9523 must switch on BUS_OUT_EN and
+BOOST_EN for the body to answer. On the owner's unit replies from the servos
+lose a byte now and then while the motors run, so reads are retried; a move
+against a stop drew 0.7 A, after which the servos sometimes stayed silent
+until their power went off and on, so the driver stops a move that draws
+more than 450 mA and power-cycles servos that stop answering. The build names
+its own product (`CONFIG_GADGET_PRODUCT_ID`), whose manifest
+`tools/stackchan_manifest.py` makes. To go back to M5's firmware later, back
+it up first: `python -m esptool --chip esp32s3 -p PORT read-flash 0 0x1000000
+stackchan.bin`.
 
 The M5Stack StickC Plus2 runs the full UI on a classic ESP32, as does the Core2
 below. It has
@@ -477,6 +500,7 @@ board's overlays, in order:
 | M5Stack StickS3 | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-sticks3`](sdkconfig.impo-m5stack-sticks3) | by hand |
 | M5Stack StopWatch | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-stopwatch`](sdkconfig.impo-m5stack-stopwatch) | by hand |
 | M5Stack CoreS3 | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-cores3`](sdkconfig.impo-m5stack-cores3) | `tools/impo/board.sh build cores3` |
+| M5Stack StackChan | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-stackchan`](sdkconfig.impo-m5stack-stackchan) | `tools/impo/board.sh build stackchan` |
 | Guition JC3248W535 | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-guition-jc3248w535`](sdkconfig.impo-guition-jc3248w535) | `tools/impo/board.sh build jc3248w535` |
 | Waveshare ESP32-S3-Touch-LCD-7 | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-waveshare-s3-lcd7`](sdkconfig.impo-waveshare-s3-lcd7) | `tools/impo/board.sh build lcd7` |
 | M5Stack StickC Plus2 | `esp32` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-stickc-plus2`](sdkconfig.impo-m5stack-stickc-plus2) | by hand |

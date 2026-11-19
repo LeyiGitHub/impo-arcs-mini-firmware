@@ -79,7 +79,7 @@ cd esp32 && tools/flash.sh cores3     # the name under each board
 ### Robots
 
 <table>
-<tr><td align="center" valign="top" width="25%"><a href="https://github.com/78/xiaozhi-esp32/tree/main/main/boards/espressif/esp-sparkbot"><img src="hardware/images/espressif-sparkbot.webp" height="150" alt="Espressif ESP-SparkBot"></a><br><b>ESP-SparkBot</b><br><sub>Espressif · ESP32-S3</sub><br><sub>Drives · Camera · Voice · Motion sensor</sub><br><code>flash.sh sparkbot</code></td><td align="center" valign="top" width="25%"><a href="https://github.com/Freenove/Freenove_4WD_Car_Kit_for_ESP32"><img src="hardware/images/freenove-4wd-car.webp" height="150" alt="Freenove 4WD Car Kit (FNK0053)"></a><br><b>4WD Car Kit (FNK0053)</b><br><sub>Freenove · ESP32</sub><br><sub>Drives · Camera · Distance sensor · Turning head</sub><br><code>flash.sh freenove-4wd-car</code></td><td align="center" valign="top" width="25%"><a href="arcs/README.md"><img src="hardware/images/arcs-mini-v2-1.webp" height="150" alt="ListenAI ARCS-MINI V2.1 robot dog"></a><br><b>ARCS-MINI V2.1 robot dog</b><br><sub>ListenAI · ARCS LS26xx</sub><br><sub>Walks · Tricks · Voice · Motion sensor</sub><br><code>arcs/build.sh</code></td><td align="center" valign="top" width="25%"><a href="https://shop.m5stack.com/products/stackchan-kawaii-co-created-open-source-ai-desktop-robot"><img src="hardware/images/m5stack-stackchan.webp" height="150" alt="M5Stack StackChan"></a><br><b>StackChan</b><br><sub>M5Stack · ESP32-S3</sub><br><sub>Voice · Screen</sub><br><sub><i>Experimental</i></sub><br><code>flash.sh cores3</code></td></tr>
+<tr><td align="center" valign="top" width="25%"><a href="https://github.com/78/xiaozhi-esp32/tree/main/main/boards/espressif/esp-sparkbot"><img src="hardware/images/espressif-sparkbot.webp" height="150" alt="Espressif ESP-SparkBot"></a><br><b>ESP-SparkBot</b><br><sub>Espressif · ESP32-S3</sub><br><sub>Drives · Camera · Voice · Motion sensor</sub><br><code>flash.sh sparkbot</code></td><td align="center" valign="top" width="25%"><a href="https://github.com/Freenove/Freenove_4WD_Car_Kit_for_ESP32"><img src="hardware/images/freenove-4wd-car.webp" height="150" alt="Freenove 4WD Car Kit (FNK0053)"></a><br><b>4WD Car Kit (FNK0053)</b><br><sub>Freenove · ESP32</sub><br><sub>Drives · Camera · Distance sensor · Turning head</sub><br><code>flash.sh freenove-4wd-car</code></td><td align="center" valign="top" width="25%"><a href="arcs/README.md"><img src="hardware/images/arcs-mini-v2-1.webp" height="150" alt="ListenAI ARCS-MINI V2.1 robot dog"></a><br><b>ARCS-MINI V2.1 robot dog</b><br><sub>ListenAI · ARCS LS26xx</sub><br><sub>Walks · Tricks · Voice · Motion sensor</sub><br><code>arcs/build.sh</code></td><td align="center" valign="top" width="25%"><a href="https://shop.m5stack.com/products/stackchan-kawaii-co-created-open-source-ai-desktop-robot"><img src="hardware/images/m5stack-stackchan.webp" height="150" alt="M5Stack StackChan"></a><br><b>StackChan</b><br><sub>M5Stack · ESP32-S3</sub><br><sub>Turning head · Head touch · Lights · Voice</sub><br><code>flash.sh stackchan</code></td></tr>
 </table>
 
 ### Screens and desk companions
@@ -120,10 +120,10 @@ cd esp32 && tools/flash.sh cores3     # the name under each board
 Before you flash:
 
 - **Freenove 4WD Car Kit (FNK0053)**: Back up Freenove's firmware and erase NVS first (esp32/devices/README.md).
-- **M5Stack StackChan**: Runs the CoreS3 build: screen, voice and pairing. Its head servos and head touch are not driven yet.
+- **M5Stack StackChan**: Back up M5's firmware first if you may want it back: the Impo build replaces it.
 - **Xteink X4**: Keeps Xteink's bootloader and app; read esp32/devices/XTEINK_X4.md first.
 
-36 boards: 31 ready, 5 experimental. Specifications, pins and per-board notes are in [`esp32/devices/README.md`](esp32/devices/README.md). More devices we are looking at are on [impo.ai/hardware](https://impo.ai/hardware/).
+36 boards: 32 ready, 4 experimental. Specifications, pins and per-board notes are in [`esp32/devices/README.md`](esp32/devices/README.md). More devices we are looking at are on [impo.ai/hardware](https://impo.ai/hardware/).
 
 <!-- hardware:end -->
 

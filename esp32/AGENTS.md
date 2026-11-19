@@ -69,6 +69,7 @@ before adding a feature to one.
 | M5Stack StickS3 | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-sticks3` | manual |
 | M5Stack StopWatch | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-stopwatch` | manual |
 | M5Stack CoreS3 | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-cores3` | `tools/impo/board.sh build cores3` |
+| M5Stack StackChan | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-stackchan` | `tools/impo/board.sh build stackchan` |
 | Freenove FNK0104B | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-fnk0104b` | `tools/impo/board.sh build fnk0104b` |
 | VN ESP32-S3 1.83-inch NV3023 | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-vn-s3-183` | `tools/impo/board.sh build vn183` |
 | Guition JC3248W535 | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-guition-jc3248w535` | `tools/impo/board.sh build jc3248w535` |
@@ -134,7 +135,7 @@ voice note that Impo answers in the app, and the dial sets the speaker volume
 
 ### Boards with the full UI, by hand
 
-`tools/impo/board.sh build|flash <s3|s3n|s3-216|aipi|sparkbot|box3|c6|c6-206|watcher|sticks3|plus2|cardputer-adv|stopwatch|cores3|core2|jc3248w535|lcd7|vn183|ai-passport> [SERIAL|PORT]`
+`tools/impo/board.sh build|flash <s3|s3n|s3-216|aipi|sparkbot|box3|c6|c6-206|watcher|sticks3|plus2|cardputer-adv|stopwatch|cores3|stackchan|core2|jc3248w535|lcd7|vn183|ai-passport> [SERIAL|PORT]`
 builds one board in `build-impo-<profile>/`, logs to
 `/tmp/impo_build_<board>.log`, and clears `managed_components/` before and
 after so it doesn't clash with other boards. When flashing, it finds the

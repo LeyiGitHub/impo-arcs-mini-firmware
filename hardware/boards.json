@@ -90,17 +90,19 @@
       "vendor": "M5Stack",
       "category": "robotics",
       "chip": "ESP32-S3",
-      "status": "experimental",
+      "status": "ready",
       "sdk": "esp32",
-      "flash": "cores3",
+      "flash": "stackchan",
       "highlights": [
-        "Voice",
-        "Screen"
+        "Turning head",
+        "Head touch",
+        "Lights",
+        "Voice"
       ],
       "display": "2\" 320×240 LCD, touch",
       "memory": "16 MB / 8 MB",
       "link": "https://shop.m5stack.com/products/stackchan-kawaii-co-created-open-source-ai-desktop-robot",
-      "note": "Runs the CoreS3 build: screen, voice and pairing. Its head servos and head touch are not driven yet."
+      "note": "Back up M5's firmware first if you may want it back: the Impo build replaces it."
     },
     {
       "id": "m5stack-cores3",

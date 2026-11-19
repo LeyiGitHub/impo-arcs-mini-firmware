@@ -1,11 +1,11 @@
 ## This copy replaces espressif/bmi270 in every build. The M5Stack CoreS3 BSP
 ## includes iot_sensor_hub.h through that component's public sensor_hub
-## dependency, so the CoreS3 build keeps it here. Only the header is used: the
-## BSP's sensor_hub code (bsp_sensors.c) is not linked, so the legacy I2C
-## driver behind it stays out of the image.
+## dependency, so the CoreS3 and StackChan builds keep it here. Only the
+## header is used: the BSP's sensor_hub code (bsp_sensors.c) is not linked, so
+## the legacy I2C driver behind it stays out of the image.
 dependencies:
   espressif/sensor_hub:
     version: "^0.1.4"
     public: true
     rules:
-      - if: "$CONFIG{IMPO_BOARD_ID} == \"m5stack_cores3\""
+      - if: "$CONFIG{IMPO_BOARD_ID} in [\"m5stack_cores3\", \"m5stack_stackchan\"]"

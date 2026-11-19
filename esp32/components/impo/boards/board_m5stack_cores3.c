@@ -22,6 +22,10 @@
  * (the BSP switches them on as each part starts) and reports the battery.
  * There is no user button besides PWR, which only the PMU sees: it is talk,
  * read from the PMU's key IRQ latches. The touchscreen runs the menus.
+ *
+ * The same file runs the M5Stack StackChan (CONFIG_IMPO_BOARD_M5STACK_STACKCHAN),
+ * a CoreS3 on a body with a moving head: stackchan_head.c drives its servos,
+ * head touch and LEDs, and this file lists their commands.
  */
 #include "bsp/esp-bsp.h"
 #include "esp_check.h"
@@ -33,12 +37,34 @@
 #include "impo_audio.h"
 #include "impo_mem.h"
 #include "impo_pmu.h"
+#if CONFIG_IMPO_BOARD_M5STACK_STACKCHAN
+#include "stackchan_head.h"
+#endif
 
 #define PMU_KEY_EVERY 2         /* poll the PMU over I2C every 20 ms */
 
 static const char *TAG = "board";
 static esp_codec_dev_handle_t s_spk, s_mic;
 static bool s_pmu;
+
+#if CONFIG_IMPO_BOARD_M5STACK_STACKCHAN
+/* The body takes 5 V from the CoreS3's bus: its output switch (AW9523 P0_1)
+ * and the boost converter (P1_7), which M5Stack's StackChan firmware turns
+ * on and Espressif's BSP leaves alone. */
+static void body_start(void)
+{
+    esp_io_expander_handle_t aw = bsp_io_expander_init();
+    const uint32_t pins = IO_EXPANDER_PIN_NUM_1 | IO_EXPANDER_PIN_NUM_15;
+    if (!aw || esp_io_expander_set_dir(aw, pins, IO_EXPANDER_OUTPUT) != ESP_OK ||
+        esp_io_expander_set_level(aw, pins, 1) != ESP_OK) {
+        ESP_LOGW(TAG, "could not switch on the 5 V bus output");
+    }
+    esp_err_t err = stackchan_head_init(bsp_i2c_get_handle());
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "StackChan body unavailable (%s)", esp_err_to_name(err));
+    }
+}
+#endif
 
 static esp_err_t init(void)
 {
@@ -48,9 +74,12 @@ static esp_err_t init(void)
     esp_err_t err = impo_pmu_init(bsp_i2c_get_handle(), true);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "PMU unavailable (%s): no talk button or battery status", esp_err_to_name(err));
-        return ESP_OK;
+    } else {
+        s_pmu = true;
     }
-    s_pmu = true;
+#if CONFIG_IMPO_BOARD_M5STACK_STACKCHAN
+    body_start();
+#endif
     return ESP_OK;
 }
 
@@ -147,8 +176,24 @@ static esp_err_t power_off(void)
     return impo_pmu_power_off();
 }
 
+#if CONFIG_IMPO_BOARD_M5STACK_STACKCHAN
+static const impo_command_t s_commands[] = {
+    { "head.look",   stackchan_head_look },
+    { "head.nod",    stackchan_head_nod },
+    { "head.shake",  stackchan_head_shake },
+    { "head.center", stackchan_head_center },
+    { "head.status", stackchan_head_status },
+    { "lights.set",  stackchan_lights_set },
+    { "lights.off",  stackchan_lights_off },
+};
+#endif
+
 static const impo_board_t s_board = {
+#if CONFIG_IMPO_BOARD_M5STACK_STACKCHAN
+    .name = "M5Stack StackChan",
+#else
     .name = "M5Stack CoreS3",
+#endif
     .width = BSP_LCD_H_RES,
     .height = BSP_LCD_V_RES,
     .round = false,
@@ -168,6 +213,11 @@ static const impo_board_t s_board = {
     .poll_buttons = poll_buttons,
     .read_power = read_power,
     .power_off = power_off,
+#if CONFIG_IMPO_BOARD_M5STACK_STACKCHAN
+    .commands = s_commands,
+    .command_count = sizeof(s_commands) / sizeof(s_commands[0]),
+    .features = "head,head_touch,lights",
+#endif
 };
 
 const impo_board_t *impo_board_get(void)

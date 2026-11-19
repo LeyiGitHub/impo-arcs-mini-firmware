@@ -66,7 +66,8 @@ developer platform, not the firmware. The contract is
 
 `features` names what the fixed keys don't: a board lists its own in
 `impo_board_t.features`. Known values: `motion_sensor` (`imu.*`), `locomotion`
-(`chassis.*`), `lights` (lights the agent can set), `touch_pads`,
+(`chassis.*`), `head` (`head.*`), `head_touch` (sends `head_touched`), `lights`
+(lights the agent can set: `chassis.set_light` or `lights.*`), `touch_pads`,
 `environment_sensors` (`sensors.read`).
 
 The Impo server shows `capabilities` with each gadget in
@@ -250,6 +251,34 @@ drops. Its results add `stopped` (why the last drive ended: `time_up`,
 battery, a `warning`: the wheels run only on its cells. Only its wheels are
 wired so far, so it registers `chassis.drive`, `move`, `stop` and `status`.
 
+### `head.*` — a head that turns
+
+| Command | Who has it | Parameters | Result payload |
+|---|---|---|---|
+| `head.look` | `head` | `yaw` −120..120°, `pitch` 0..85°, `duration_ms`? 100–5000 | `{"duration_ms"}` |
+| `head.nod` | `head` | `times`? 1–5 (2) | `{"duration_ms"}` |
+| `head.shake` | `head` | `times`? 1–5 (2) | `{"duration_ms"}` |
+| `head.center` | `head` | — | `{"duration_ms"}` |
+| `head.status` | `head` | — | `{"yaw", "pitch", "moving", "holding", "stalls", "restarts", "battery_v", "battery_ma"}` |
+
+Moves return at once and ease the head there; a new move replaces the one
+under way. The servos let go half a second after a move ends, so the head can
+be turned by hand (`holding` false). A move that pushes against something is
+stopped (`stalls`), and servos that stop answering are switched off and on
+(`restarts`). Errors: `no_head` (the servos did not answer at start-up),
+`servo_silent`, `busy`. On the M5Stack StackChan yaw 0 and pitch 0 look
+straight ahead, and `battery_v` and `battery_ma` are the body's own battery.
+
+### `lights.*` — lights in one colour
+
+| Command | Who has it | Parameters | Result payload |
+|---|---|---|---|
+| `lights.set` | `lights` | `color` (red, orange, yellow, green, cyan, blue, purple, pink, white, warm, off or `#rrggbb`), `brightness`? 1–100 (40) | — |
+| `lights.off` | `lights` | — | — |
+
+The StackChan's 12 LEDs in its body. They stay until changed; a head touch
+glows them pink for a moment and then shows them again.
+
 ### `sensors.*` — the surroundings
 
 | Command | Who has it | Parameters | Result payload |
@@ -280,6 +309,7 @@ repeat of the same event from the same gadget within three seconds.
 | `shaken` | `motion_sensor` | `peak_g`, `strength` gentle/hard |
 | `picked_up` | `motion_sensor` | `orientation` it ended up in |
 | `put_down` | `motion_sensor` | `orientation` (upright) |
+| `head_touched` | `head_touch` | `how` pat/stroke, at most every 5 s |
 
 A board sends one with `impo_link_send_event(name, data)`; a new event name
 gets a row here first. What it means on a device goes in the product's

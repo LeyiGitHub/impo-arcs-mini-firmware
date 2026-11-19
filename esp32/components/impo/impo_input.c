@@ -631,6 +631,23 @@ static bool console_command(char *line, bool whole)
         fflush(stdout);
         return true;
     }
+    if (!strncmp(line, "run=", 4) && whole) {
+        /* Bench: one of this gadget's commands as link.invoke would run it,
+         * "run=head.look {\"yaw\":30}". Over USB only, never over BLE. */
+        char *name = line + 4, *json = strchr(name, ' ');
+        if (json) {
+            *json++ = '\0';
+        }
+        cJSON *params = json ? cJSON_Parse(json) : cJSON_CreateObject();
+        cJSON *result = params ? impo_commands_run(name, params) : impo_command_error("invalid_params", "not JSON");
+        char *text = result ? cJSON_PrintUnformatted(result) : NULL;
+        printf("@run {\"command\":\"%s\",\"result\":%s}\n", name, text ? text : "null");
+        fflush(stdout);
+        cJSON_free(text);
+        cJSON_Delete(result);
+        cJSON_Delete(params);
+        return true;
+    }
     if (!strcmp(line, "status")) {
         size_t cap = 1024;   /* long SSID, host and VM names escaped: past 512 */
         char *json = heap_caps_malloc(cap, IMPO_BIG_CAPS);
@@ -703,8 +720,9 @@ static bool console_command(char *line, bool whole)
  * the device's state, "power" the battery meter (impo_battery.h) and
  * "power.reset" starts it over, "nap" sleeps and leaves Wi-Fi at once (as
  * two minutes asleep on battery would; 'w' rejoins), "face=" shows a face
- * (see set_face), and "chat=" sends a typed message to Hatch (see chat_line
- * and tools/impo/chat.py).
+ * (see set_face), "run=" runs one of the gadget's commands and prints its
+ * result, and "chat=" sends a typed message to Hatch (see chat_line and
+ * tools/impo/chat.py).
  */
 static void serial_task(void *arg)
 {
