@@ -1,0 +1,9 @@
+menu "M5Stack StackChan"
+
+    config M5STACK_STACKCHAN
+        bool
+        default y
+        # The body plugs into the CoreS3 board (m5stack_cores3.h).
+        select M5STACK_CORES3_BODY
+
+endmenu

@@ -56,7 +56,6 @@ static bool s_imu_ok;
 typedef struct { float accel[3], gyro[3]; const char *orientation; bool moving; } sparkbot_imu_reading_t;
 static esp_err_t sparkbot_imu_read(sparkbot_imu_reading_t *r) { (void)r; return ESP_ERR_NOT_FOUND; }
 static unsigned sparkbot_touch_state(void) { return 0; }
-static void console_snap(void) { printf("@snap {\"error\":\"no camera here\"}\n"); }
 static const char *esp_err_to_name(esp_err_t e) { (void)e; return "ESP_ERR_NOT_FOUND"; }
 static int xSemaphoreTake(int lock, int wait) {
     (void)lock; (void)wait;

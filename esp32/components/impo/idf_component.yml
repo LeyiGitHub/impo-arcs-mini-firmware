@@ -15,7 +15,10 @@
 dependencies:
   idf:
     version: ">=5.5"
-  espressif/cjson: "~1.7"
+  # Public: impo_commands.h, which device folders include, uses cJSON.
+  espressif/cjson:
+    version: "~1.7"
+    public: true
   lvgl/lvgl:
     version: "9.5.0"
     public: true
@@ -54,10 +57,6 @@ dependencies:
     version: "3.2.0"
     rules:
       - if: "$CONFIG{IMPO_BOARD_ID} == \"espressif_box_3\""
-  espressif/m5stack_core_s3:
-    version: "4.1.0"
-    rules:
-      - if: "$CONFIG{IMPO_BOARD_ID} in [\"m5stack_cores3\", \"m5stack_stackchan\"]"
   waveshare/esp32_c6_touch_amoled_1_8:
     version: "^1.0.0"
     rules:

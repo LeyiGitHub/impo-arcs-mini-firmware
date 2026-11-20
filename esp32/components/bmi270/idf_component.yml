@@ -1,6 +1,6 @@
-## This copy replaces espressif/bmi270 in every build. The M5Stack CoreS3 BSP
-## includes iot_sensor_hub.h through that component's public sensor_hub
-## dependency, so the CoreS3 and StackChan builds keep it here. Only the
+## This copy replaces espressif/bmi270 in every build. A BSP that includes
+## iot_sensor_hub.h through that component's public sensor_hub dependency (the
+## M5Stack CoreS3's) selects IMPO_BSP_SENSOR_HUB, so it is kept here. Only the
 ## header is used: the BSP's sensor_hub code (bsp_sensors.c) is not linked, so
 ## the legacy I2C driver behind it stays out of the image.
 dependencies:
@@ -8,4 +8,4 @@ dependencies:
     version: "^0.1.4"
     public: true
     rules:
-      - if: "$CONFIG{IMPO_BOARD_ID} in [\"m5stack_cores3\", \"m5stack_stackchan\"]"
+      - if: "$CONFIG{IMPO_BSP_SENSOR_HUB} == True"

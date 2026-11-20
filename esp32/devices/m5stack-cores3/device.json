@@ -1,0 +1,17 @@
+{
+  "id": "m5stack-cores3",
+  "name": "CoreS3",
+  "vendor": "M5Stack",
+  "category": "displays",
+  "chip": "ESP32-S3",
+  "target": "esp32s3",
+  "profile": "impo",
+  "flash": "cores3",
+  "usb": "usj",
+  "status": "ready",
+  "sdk": "esp32",
+  "highlights": ["Voice", "Touch", "Camera", "Battery"],
+  "display": "2\" 320×240 LCD, touch",
+  "memory": "16 MB / 8 MB",
+  "link": "https://docs.m5stack.com/en/core/CoreS3"
+}

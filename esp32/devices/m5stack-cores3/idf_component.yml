@@ -1,0 +1,8 @@
+## The CoreS3's own components. Espressif's BSP brings the panel, touch, codecs,
+## the AW9523 expander and esp_video for the camera.
+dependencies:
+  espressif/m5stack_core_s3:
+    version: "4.1.0"
+  # Espressif's SIMD JPEG encoder, for the camera's YUV422 frames.
+  espressif/esp_new_jpeg:
+    version: "~1.0"

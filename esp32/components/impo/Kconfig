@@ -27,6 +27,12 @@ menu "Impo"
         config IMPO_BOARD_NONE
             bool "None (Home Link without a display)"
 
+        config IMPO_BOARD_DEVICE
+            bool "The device folder's own (devices/<id>, built with IMPO_DEVICE)"
+            help
+                The board's code is in its device folder (devices/README.md),
+                which provides impo_board_get().
+
         config IMPO_BOARD_WAVESHARE_S3_175C
             bool "Waveshare ESP32-S3-Touch-AMOLED-1.75C"
             depends on IDF_TARGET_ESP32S3
@@ -79,14 +85,6 @@ menu "Impo"
             bool "M5Stack StopWatch (ESP32-S3, round touch AMOLED)"
             depends on IDF_TARGET_ESP32S3
 
-        config IMPO_BOARD_M5STACK_CORES3
-            bool "M5Stack CoreS3 (ESP32-S3, 320x240 touch LCD, speaker and microphones)"
-            depends on IDF_TARGET_ESP32S3
-
-        config IMPO_BOARD_M5STACK_STACKCHAN
-            bool "M5Stack StackChan (a CoreS3 on a body with a moving head, head touch and LEDs)"
-            depends on IDF_TARGET_ESP32S3
-
         config IMPO_BOARD_M5STACK_CORE2
             bool "M5Stack Core2 v1.0 (ESP32, touch LCD, touch-strip talk)"
             depends on IDF_TARGET_ESP32
@@ -116,6 +114,7 @@ menu "Impo"
     # idf_component.yml rules can select each board's managed components.
     config IMPO_BOARD_ID
         string
+        default "device" if IMPO_BOARD_DEVICE
         default "waveshare_s3_175c" if IMPO_BOARD_WAVESHARE_S3_175C
         default "waveshare_s3_175" if IMPO_BOARD_WAVESHARE_S3_175
         default "waveshare_s3_216" if IMPO_BOARD_WAVESHARE_S3_216
@@ -129,8 +128,6 @@ menu "Impo"
         default "m5stack_stickc_plus2" if IMPO_BOARD_M5STACK_STICKC_PLUS2
         default "m5stack_cardputer_adv" if IMPO_BOARD_M5STACK_CARDPUTER_ADV
         default "m5stack_stopwatch" if IMPO_BOARD_M5STACK_STOPWATCH
-        default "m5stack_cores3" if IMPO_BOARD_M5STACK_CORES3
-        default "m5stack_stackchan" if IMPO_BOARD_M5STACK_STACKCHAN
         default "m5stack_core2" if IMPO_BOARD_M5STACK_CORE2
         default "fnk0104b" if IMPO_BOARD_FNK0104B
         default "guition_jc3248w535" if IMPO_BOARD_GUITION_JC3248W535
@@ -163,11 +160,24 @@ menu "Impo"
             Leave disabled to build without camera support.
 
     # The camera.capture command, on boards with a camera to register
-    # (components/camera): the Watcher's Himax, the ESP-SparkBot's OV2640
-    # and the Freenove car's OV2640 or OV3660.
+    # (components/camera): the Watcher's Himax, the ESP-SparkBot's OV2640,
+    # the Freenove car's OV2640 or OV3660, and a device folder's that selects
+    # it (the M5Stack CoreS3's GC0308).
     config IMPO_CAMERA
         bool
         default y if IMPO_WATCHER_CAMERA || IMPO_BOARD_ESPRESSIF_SPARKBOT || CAMERA_DVP
+
+    # The component manager reads components/bmi270's rule on this in every
+    # build, so it must be in every sdkconfig: this Kconfig is in every build,
+    # and only an option with a prompt is written when it is n.
+    config IMPO_BSP_SENSOR_HUB
+        bool "Keep sensor_hub for the board's BSP"
+        default n
+        help
+            Selected by a device whose BSP includes iot_sensor_hub.h through
+            espressif/bmi270 (the M5Stack CoreS3's): components/bmi270, which
+            replaces that component, then keeps its public sensor_hub
+            dependency. Nothing to set by hand.
 
     config IMPO_CJK_FONT
         bool "Show Chinese and Japanese in captions"

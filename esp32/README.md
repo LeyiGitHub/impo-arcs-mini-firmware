@@ -300,9 +300,10 @@ python3 tools/impo/chassis.py /dev/cu.usbmodem2101 forward
 
 `probe` only sends a stop; `forward`, `back`, `left` and `right` run one
 300 ms pulse that the head ends by itself. `tools/impo/photo.py <port>
-[file.jpg]` takes a photo the same way. The console commands behind them are
-`>chassis=probe`, `>chassis=forward` and so on, `>imu`, `>touch` and `>snap`,
-each answered with a JSON frame of the same name.
+[file.jpg]` takes a photo the same way, on any board with a camera. The
+console commands behind them are `>chassis=probe`, `>chassis=forward` and so
+on, `>imu` and `>touch` (the SparkBot's own) and `>snap` (every board with a
+camera), each answered with a JSON frame of the same name.
 
 Units differ from Espressif's documentation: the one here carries a BMI260
 (not BMI270) and a GC2145 camera (not OV2640). The GC2145 can't make JPEG

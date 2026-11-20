@@ -1,0 +1,17 @@
+{
+  "id": "m5stack-stackchan",
+  "base": "m5stack-cores3",
+  "name": "StackChan",
+  "vendor": "M5Stack",
+  "category": "robotics",
+  "chip": "ESP32-S3",
+  "flash": "stackchan",
+  "usb": "usj",
+  "status": "ready",
+  "sdk": "esp32",
+  "highlights": ["Turning head", "Head touch", "Camera", "Lights", "Voice"],
+  "display": "2\" 320×240 LCD, touch",
+  "memory": "16 MB / 8 MB",
+  "link": "https://shop.m5stack.com/products/stackchan-kawaii-co-created-open-source-ai-desktop-robot",
+  "note": "Back up M5's firmware first if you may want it back: the Impo build replaces it."
+}

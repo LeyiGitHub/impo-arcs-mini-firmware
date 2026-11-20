@@ -77,9 +77,17 @@ if [ "$cmd" = build ]; then
     # can recreate files mid-delete, so retry.
     clean() { for _ in 1 2 3; do rm -rf managed_components dependencies.lock 2>/dev/null && return; sleep 1; done; }
     clean
-    idf.py -B $B -DIDF_TARGET=$target -DSDKCONFIG=$B/sdkconfig \
-        -DSDKCONFIG_DEFAULTS="$defaults" \
-        build > $log 2>&1; rc=$?
+    if [ -f devices/$profile/device.json ]; then
+        # A device folder (devices/README.md) names its own settings; build
+        # from them alone, as CI does.
+        rm -f $B/sdkconfig
+        [ -n "${IMPO_BENCH:-}" ] && export IMPO_EXTRA_DEFAULTS="$root/devices/sdkconfig.impo-bench"
+        idf.py -B $B -DIMPO_DEVICE=$profile -DSDKCONFIG=$B/sdkconfig build > $log 2>&1; rc=$?
+    else
+        idf.py -B $B -DIDF_TARGET=$target -DSDKCONFIG=$B/sdkconfig \
+            -DSDKCONFIG_DEFAULTS="$defaults" \
+            build > $log 2>&1; rc=$?
+    fi
     clean
     grep -E "error:|undefined reference" $log | head -20
     tail -3 $log

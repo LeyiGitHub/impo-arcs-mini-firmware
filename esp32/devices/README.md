@@ -25,6 +25,33 @@ the default and needs no overlay.
 Every board pairs with the Impo app, joins your Wi-Fi, and holds an encrypted
 session to Impo. The rest depends on the hardware.
 
+## Device folders
+
+Boards are moving into folders of their own, one per device:
+`devices/<id>/` holds everything about it, and nothing about it lives
+elsewhere. The M5Stack CoreS3 and StackChan are the first.
+
+| File | What it is |
+| --- | --- |
+| `device.json` | the device's one description: `id` (the folder's name), `name`, `vendor`, `category`, `chip`, `status`, `sdk`, `highlights`, `flash` (the name `tools/impo/board.sh` takes), the catalog's `display`, `memory`, `link` and `note`, and for a chain's root the IDF `target` and the settings `profile` (`devices/sdkconfig.<profile>`) |
+| `sdkconfig` | the device's settings, loaded after `../sdkconfig.defaults`, the profile and its base's |
+| `CMakeLists.txt`, `idf_component.yml`, `Kconfig` | the folder is an IDF component, named after it, with its own dependencies and options |
+| board code | the board itself; with `CONFIG_IMPO_BOARD_DEVICE=y` it provides `impo_board_get()` |
+| `vendor/` | code copied from elsewhere, unchanged, with its licence and a README naming its source and version |
+| `README.md` | how to flash it and what works |
+
+`"base": "<id>"` builds a device on another: a product that is a known board
+inside a body (the StackChan is a CoreS3 in M5Stack's robot) names the board
+as its base and adds only the body. Its folder's component and settings come
+after the base's, and only the chain's root names the target, profile and
+`CONFIG_IMPO_BOARD_DEVICE`.
+
+Build one with `idf.py -B build-<id> -DIMPO_DEVICE=<id> -DSDKCONFIG=build-<id>/sdkconfig build`
+(or `tools/impo/board.sh build <flash>`); `cmake/project.cmake` follows the
+chain and sets the target, the settings files and the component folders.
+`IMPO_EXTRA_DEFAULTS` adds more settings files on top, such as
+`devices/sdkconfig.impo-bench`. `tests/test_devices.py` checks every folder.
+
 ## Supported devices
 
 | Board | Chip | Display | Flash / PSRAM | Reference | Buy |
@@ -217,33 +244,28 @@ from the AXP2101's key interrupts (its hardware power-off moves to a 10 s
 hold), and settings are on the touch screen (swipe left from Impo). RST on the
 bottom edge restarts the board, and holding it for 3 s enters the bootloader.
 Powering off from Impo switches the AXP2101 off; click PWR to turn it back on.
-Its 1 W speaker is quiet, so the volume starts at 100%. The camera, proximity
-sensor, IMU, RTC, SD card and Grove ports aren't used yet. It enumerates as the
-chip's own USB serial port: `tools/impo/board.sh flash cores3`. If esptool
+Its 1 W speaker is quiet, so the volume starts at 100%. The GC0308 camera
+(`camera.capture`) and BMI270 motion sensor (`imu.read`, `shaken`) run on
+M5Stack's own code; the proximity sensor, RTC, SD card and Grove ports aren't
+used yet. Its folder is [`m5stack-cores3`](m5stack-cores3/README.md). It
+enumerates as the chip's own USB serial port: `tools/impo/board.sh flash cores3`. If esptool
 can't connect, hold RST for 3 s, until the green LED lights, to enter the
 bootloader.
 
-The M5Stack StackChan is a CoreS3 on M5's robot body, and its build
-(`tools/impo/board.sh flash stackchan`) is the CoreS3's plus the body
-(`boards/stackchan_head.c`, following M5's own
-[StackChan firmware](https://github.com/m5stack/StackChan), MIT). Two Feetech
-SCS0009 servos on one 1 Mbit/s bus (UART1, GPIO6/7) turn the head (id 1, yaw,
-±120°) and tilt it (id 2, pitch, 3..85°): `head.look`, `head.nod`,
-`head.shake`, `head.center` and `head.status`. Moves are eased and the servos
-let go half a second after each one. A PY32 IO expander (I2C 0x6F) switches
-the servo power and drives the 12 RGB LEDs (`lights.set`, `lights.off`), an
-Si12T (0x68) reads the three touch zones along the top of the head (a pat or
-a stroke glows the LEDs pink and sends `head_touched`), and an INA226 (0x41)
-measures the body's battery. The CoreS3's AW9523 must switch on BUS_OUT_EN and
-BOOST_EN for the body to answer. On the owner's unit replies from the servos
-lose a byte now and then while the motors run, so reads are retried; a move
-against a stop drew 0.7 A, after which the servos sometimes stayed silent
-until their power went off and on, so the driver stops a move that draws
-more than 450 mA and power-cycles servos that stop answering. The build names
-its own product (`CONFIG_GADGET_PRODUCT_ID`), whose manifest
-`tools/stackchan_manifest.py` makes. To go back to M5's firmware later, back
-it up first: `python -m esptool --chip esp32s3 -p PORT read-flash 0 0x1000000
-stackchan.bin`.
+The M5Stack StackChan is a CoreS3 on M5's robot body:
+[`m5stack-stackchan`](m5stack-stackchan/README.md), with the CoreS3 as its
+base (`tools/impo/board.sh flash stackchan`). The body runs M5Stack's own
+[StackChan firmware](https://github.com/m5stack/StackChan) code (MIT),
+unchanged: two Feetech SCS0009 servos on UART1 turn and tilt the head with
+spring easing and stall protection, a PY32 IO expander (I2C 0x6F) switches
+their power and drives the 12 RGB LEDs, and an Si12T (0x68) reads the touch
+strip on the head. Impo adds the commands (`head.look`, `head.nod`,
+`head.shake`, `head.dance`, `head.center`, `head.status`, `lights.set`,
+`lights.off`), the `head_touched` event and M5Stack's touch and shake
+reactions. The build names its own product (`CONFIG_GADGET_PRODUCT_ID`), whose
+manifest the folder's `manifest.py` makes. To go back to M5's firmware later,
+back it up first: `python -m esptool --chip esp32s3 -p PORT read-flash 0
+0x1000000 stackchan.bin`.
 
 The M5Stack StickC Plus2 runs the full UI on a classic ESP32, as does the Core2
 below. It has
@@ -499,8 +521,8 @@ board's overlays, in order:
 | M5Stack Cardputer ADV | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-cardputer-adv` | `tools/impo/board.sh build cardputer-adv` |
 | M5Stack StickS3 | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-sticks3`](sdkconfig.impo-m5stack-sticks3) | by hand |
 | M5Stack StopWatch | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-stopwatch`](sdkconfig.impo-m5stack-stopwatch) | by hand |
-| M5Stack CoreS3 | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-cores3`](sdkconfig.impo-m5stack-cores3) | `tools/impo/board.sh build cores3` |
-| M5Stack StackChan | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-stackchan`](sdkconfig.impo-m5stack-stackchan) | `tools/impo/board.sh build stackchan` |
+| M5Stack CoreS3 | `esp32s3` | device folder [`m5stack-cores3`](m5stack-cores3) | `tools/impo/board.sh build cores3` |
+| M5Stack StackChan | `esp32s3` | device folder [`m5stack-stackchan`](m5stack-stackchan), base `m5stack-cores3` | `tools/impo/board.sh build stackchan` |
 | Guition JC3248W535 | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-guition-jc3248w535`](sdkconfig.impo-guition-jc3248w535) | `tools/impo/board.sh build jc3248w535` |
 | Waveshare ESP32-S3-Touch-LCD-7 | `esp32s3` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-waveshare-s3-lcd7`](sdkconfig.impo-waveshare-s3-lcd7) | `tools/impo/board.sh build lcd7` |
 | M5Stack StickC Plus2 | `esp32` | [`devices/sdkconfig.impo`](sdkconfig.impo), [`devices/sdkconfig.impo-m5stack-stickc-plus2`](sdkconfig.impo-m5stack-stickc-plus2) | by hand |

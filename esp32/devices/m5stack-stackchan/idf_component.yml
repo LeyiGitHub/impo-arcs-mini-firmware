@@ -1,0 +1,10 @@
+## The libraries M5Stack's StackChan code is built on (firmware/repos.json),
+## at the versions M5Stack pins: smooth_ui_toolkit for the servos' spring
+## motion and the LED fades, mooncake_log for its log lines. Both MIT.
+dependencies:
+  forairaaaaa/smooth_ui_toolkit:
+    git: https://github.com/Forairaaaaa/smooth_ui_toolkit.git
+    version: v2.12.0
+  forairaaaaa/mooncake_log:
+    git: https://github.com/Forairaaaaa/mooncake_log.git
+    version: v1.5.0

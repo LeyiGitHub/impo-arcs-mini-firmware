@@ -227,7 +227,8 @@ the agent its id, so the model sees the picture rather than its bytes.
 
 `orientation` is one of `upright`, `upside_down`, `face_up`, `face_down`,
 `on_left_side`, `on_right_side`, `tilted`. `moving` is true while the gadget is
-being shaken or turned.
+being shaken or turned. The SparkBot and the M5Stack CoreS3 have it; on the
+StackChan the CoreS3 is the head, so `orientation` is the head's.
 
 ### `chassis.*` — moving about
 
@@ -255,19 +256,20 @@ wired so far, so it registers `chassis.drive`, `move`, `stop` and `status`.
 
 | Command | Who has it | Parameters | Result payload |
 |---|---|---|---|
-| `head.look` | `head` | `yaw` −120..120°, `pitch` 0..85°, `duration_ms`? 100–5000 | `{"duration_ms"}` |
+| `head.look` | `head` | `yaw` −120..120°, `pitch` 0..85°, `speed`? 100–1000 (150) | — |
 | `head.nod` | `head` | `times`? 1–5 (2) | `{"duration_ms"}` |
 | `head.shake` | `head` | `times`? 1–5 (2) | `{"duration_ms"}` |
-| `head.center` | `head` | — | `{"duration_ms"}` |
-| `head.status` | `head` | — | `{"yaw", "pitch", "moving", "holding", "stalls", "restarts", "battery_v", "battery_ma"}` |
+| `head.dance` | `head` | `name`: `happy`, `robot`, `panic` or `look_around` | `{"duration_ms"}` |
+| `head.center` | `head` | — | — |
+| `head.status` | `head` | — | `{"yaw", "pitch", "moving", "holding"}` |
 
-Moves return at once and ease the head there; a new move replaces the one
-under way. The servos let go half a second after a move ends, so the head can
-be turned by hand (`holding` false). A move that pushes against something is
-stopped (`stalls`), and servos that stop answering are switched off and on
-(`restarts`). Errors: `no_head` (the servos did not answer at start-up),
-`servo_silent`, `busy`. On the M5Stack StackChan yaw 0 and pitch 0 look
-straight ahead, and `battery_v` and `battery_ma` are the body's own battery.
+Moves return at once and spring the head there: `speed` is how briskly, and
+150 is a natural look. A new move replaces the one under way and stops a nod,
+shake or dance. The servos let go when the head rests (`holding` false), and a
+move that pushes against something is stopped. Errors: `invalid_params`, and
+`busy` while the head is in use or, after the gadget was shaken, held still
+for a few seconds. On the M5Stack StackChan yaw 0 and pitch 0 look straight
+ahead, and the dances are M5Stack's own.
 
 ### `lights.*` — lights in one colour
 
@@ -333,7 +335,8 @@ capability's memory is decided up front, not taken when used:
 | Replies spoken (`tts_data` → `decode`) | 512 KB PSRAM ring + decoder | at start-up, once |
 | `speaker.say`, `speaker.play_url` (`impo_sound`) | 160 KB in + 64 KB out, PSRAM; a 32 KB decoder task | at start-up, once |
 | `camera.capture` | 2 × 614 KB frames in PSRAM, 8 KB DMA pieces in internal RAM, a 614 KB copy and a 150 KB JPEG | for the second a photo takes, then given back |
-| `imu.read`, the motion watcher | a 3 KB task | at start-up |
+| `camera.capture` on the M5Stack CoreS3 | a 32 KB DVP DMA buffer in internal RAM and a 150 KB frame in PSRAM, both held while the camera streams from start-up; a 150 KB copy and the JPEG per photo | at start-up; the copy for the photo |
+| `imu.read`, the motion watcher | a 3 KB task (4 KB in PSRAM on the CoreS3) | at start-up |
 
 Rules that keep it that way: stream, never buffer a whole file (a sound of
 any length costs the same); release what a command took before it returns

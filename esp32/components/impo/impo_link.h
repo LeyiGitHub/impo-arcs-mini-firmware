@@ -26,6 +26,10 @@
 
 #include "impo_wifi.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * Impo runs inside Home Link, which owns the radios, the setup credentials and
  * the Hatch account. Link registers these operations at boot
@@ -116,3 +120,7 @@ int64_t impo_link_req_open(const char *verb, const char *path, const char *const
 bool impo_link_req_send(int64_t id, const void *data, size_t len, bool end_body, int wait_ms);
 void impo_link_req_cancel(int64_t id);
 void impo_link_ble_apply(void);
+
+#ifdef __cplusplus
+}
+#endif

@@ -25,6 +25,7 @@
 #include "esp_attr.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
 #if CONFIG_PM_ENABLE
@@ -34,6 +35,7 @@
 #include "impo_battery.h"
 #include "impo_ble.h"
 #include "impo_board.h"
+#include "impo_camera.h"
 #include "impo_chat.h"
 #include "impo_console.h"
 #include "impo_link.h"
@@ -613,6 +615,42 @@ static void set_face(const char *name)
     fflush(stdout);
 }
 
+#if CONFIG_IMPO_CAMERA
+static void snap_task(void *arg)
+{
+    char *jpeg = NULL;
+    const char *error = NULL;
+    int64_t started = esp_timer_get_time();
+    if (impo_camera_capture(&jpeg, &error)) {
+        int64_t captured = esp_timer_get_time();
+        printf("@snap {\"jpeg_base64\":\"%s\"}\n", jpeg);
+        fflush(stdout);
+        ESP_LOGI(TAG, "snap: capture %lld ms, output %lld ms", (long long)((captured - started) / 1000),
+                 (long long)((esp_timer_get_time() - captured) / 1000));
+    } else {
+        printf("@snap {\"error\":\"%s\"}\n", error);
+    }
+    free(jpeg);
+    fflush(stdout);
+    xTaskNotifyGive((TaskHandle_t)arg);
+    vTaskDeleteWithCaps(NULL);
+}
+
+/* ">snap": one photo from the board's camera as base64, for tools/impo/photo.py,
+ * on a task with room for the sensor driver and the JPEG encoder, which the
+ * serial task hasn't. */
+static void console_snap(void)
+{
+    TaskHandle_t waiter = xTaskGetCurrentTaskHandle();
+    if (xTaskCreateWithCaps(snap_task, "snap", 8192, waiter, 4, NULL, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(30000));
+    } else {
+        printf("@snap {\"error\":\"out of memory\"}\n");
+        fflush(stdout);
+    }
+}
+#endif
+
 /*
  * Console-only commands; false for setup commands. Their buffers are taken
  * per command: without PSRAM, static ones would hold internal RAM for good.
@@ -621,6 +659,12 @@ static bool console_command(char *line, bool whole)
 {
 #if CONFIG_IMPO_BOARD_ESPRESSIF_SPARKBOT
     if (impo_sparkbot_console(line, whole)) {
+        return true;
+    }
+#endif
+#if CONFIG_IMPO_CAMERA
+    if (whole && !strcmp(line, "snap")) {
+        console_snap();
         return true;
     }
 #endif
@@ -721,7 +765,7 @@ static bool console_command(char *line, bool whole)
  * "power.reset" starts it over, "nap" sleeps and leaves Wi-Fi at once (as
  * two minutes asleep on battery would; 'w' rejoins), "face=" shows a face
  * (see set_face), "run=" runs one of the gadget's commands and prints its
- * result, and "chat=" sends a typed message to Hatch (see chat_line and
+ * result, "snap" takes a photo on a board with a camera, and "chat=" sends a typed message to Hatch (see chat_line and
  * tools/impo/chat.py).
  */
 static void serial_task(void *arg)

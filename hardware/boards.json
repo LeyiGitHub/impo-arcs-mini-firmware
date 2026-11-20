@@ -96,6 +96,7 @@
       "highlights": [
         "Turning head",
         "Head touch",
+        "Camera",
         "Lights",
         "Voice"
       ],
@@ -116,7 +117,7 @@
       "highlights": [
         "Voice",
         "Touch",
-        "Images",
+        "Camera",
         "Battery"
       ],
       "display": "2\" 320×240 LCD, touch",

@@ -1,0 +1,17 @@
+menu "M5Stack CoreS3"
+
+    config M5STACK_CORES3
+        bool
+        default y
+        # The BSP includes iot_sensor_hub.h (components/bmi270), and the
+        # camera serves camera.capture.
+        select IMPO_BSP_SENSOR_HUB
+        select IMPO_CAMERA
+
+    config M5STACK_CORES3_BODY
+        bool
+        help
+            Selected by a body the CoreS3 sits in: it provides
+            m5stack_cores3_body (m5stack_cores3.h).
+
+endmenu

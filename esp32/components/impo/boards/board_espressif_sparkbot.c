@@ -409,39 +409,6 @@ static esp_err_t power_off(void)
     return ESP_FAIL;
 }
 
-static void snap_task(void *arg)
-{
-    char *jpeg = NULL;
-    const char *error = NULL;
-    int64_t started = esp_timer_get_time();
-    if (impo_camera_capture(&jpeg, &error)) {
-        int64_t captured = esp_timer_get_time();
-        printf("@snap {\"jpeg_base64\":\"%s\"}\n", jpeg);
-        fflush(stdout);
-        ESP_LOGI(TAG, "snap: capture %lld ms, output %lld ms", (long long)((captured - started) / 1000),
-                 (long long)((esp_timer_get_time() - captured) / 1000));
-    } else {
-        printf("@snap {\"error\":\"%s\"}\n", error);
-    }
-    free(jpeg);
-    fflush(stdout);
-    xTaskNotifyGive((TaskHandle_t)arg);
-    vTaskDeleteWithCaps(NULL);
-}
-
-/* ">snap": one photo as base64, for tools/impo/photo.py, on a task with room
- * for the sensor driver and the JPEG encoder, which the serial task hasn't. */
-static void console_snap(void)
-{
-    TaskHandle_t waiter = xTaskGetCurrentTaskHandle();
-    if (xTaskCreateWithCaps(snap_task, "snap", 8192, waiter, 4, NULL, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(30000));
-    } else {
-        printf("@snap {\"error\":\"out of memory\"}\n");
-        fflush(stdout);
-    }
-}
-
 /* With s_base_lock held: notes any echo the base sent since the last look.
  * The base's firmware echoes every byte. */
 static void base_listen(void)
@@ -678,7 +645,8 @@ static cJSON *imu_read(const cJSON *params)
     return result;
 }
 
-/* USB diagnostics: ">chassis=forward" and the like, ">imu", ">touch" and ">snap". */
+/* USB diagnostics: ">chassis=forward" and the like, ">imu" and ">touch"; ">snap" is
+ * the console's own (impo_input.c). */
 bool impo_sparkbot_console(const char *line, bool whole)
 {
     if (whole && !strcmp(line, "imu")) {
@@ -692,10 +660,6 @@ bool impo_sparkbot_console(const char *line, bool whole)
                    r.accel[0], r.accel[1], r.accel[2], r.gyro[0], r.gyro[1], r.gyro[2]);
         }
         fflush(stdout);
-        return true;
-    }
-    if (whole && !strcmp(line, "snap")) {
-        console_snap();
         return true;
     }
     if (whole && !strcmp(line, "touch")) {

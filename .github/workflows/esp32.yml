@@ -174,9 +174,12 @@ jobs:
           - board: impo-m5stack-stopwatch
             target: esp32s3
             overlays: ";devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-stopwatch"
-          - board: impo-m5stack-cores3
-            target: esp32s3
-            overlays: ";devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-cores3"
+          # Device folders (devices/README.md): the folder names its target
+          # and settings.
+          - board: m5stack-cores3
+            device: m5stack-cores3
+          - board: m5stack-stackchan
+            device: m5stack-stackchan
           - board: impo-guition-jc3248w535
             target: esp32s3
             overlays: ";devices/sdkconfig.impo;devices/sdkconfig.impo-guition-jc3248w535"
@@ -207,9 +210,14 @@ jobs:
       # The build fails if the app no longer fits its partition.
       - name: Build
         env:
+          DEVICE: ${{ matrix.device }}
           TARGET: ${{ matrix.target }}
           DEFAULTS: sdkconfig.defaults${{ matrix.overlays }}
         run: |
           . "$IDF_PATH/export.sh" > /dev/null
-          idf.py -B build -DIDF_TARGET="$TARGET" -DSDKCONFIG=build/sdkconfig \
-            -DSDKCONFIG_DEFAULTS="$DEFAULTS" build
+          if [ -n "$DEVICE" ]; then
+            idf.py -B build -DIMPO_DEVICE="$DEVICE" -DSDKCONFIG=build/sdkconfig build
+          else
+            idf.py -B build -DIDF_TARGET="$TARGET" -DSDKCONFIG=build/sdkconfig \
+              -DSDKCONFIG_DEFAULTS="$DEFAULTS" build
+          fi

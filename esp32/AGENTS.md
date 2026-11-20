@@ -68,8 +68,8 @@ before adding a feature to one.
 | M5Stack Cardputer ADV (experimental) | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-cardputer-adv` | `tools/impo/board.sh build cardputer-adv` |
 | M5Stack StickS3 | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-sticks3` | manual |
 | M5Stack StopWatch | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-stopwatch` | manual |
-| M5Stack CoreS3 | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-cores3` | `tools/impo/board.sh build cores3` |
-| M5Stack StackChan | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-m5stack-stackchan` | `tools/impo/board.sh build stackchan` |
+| M5Stack CoreS3 | `esp32s3` | device folder `devices/m5stack-cores3` (`-DIMPO_DEVICE=m5stack-cores3`) | `tools/impo/board.sh build cores3` |
+| M5Stack StackChan | `esp32s3` | device folder `devices/m5stack-stackchan`, base `m5stack-cores3` | `tools/impo/board.sh build stackchan` |
 | Freenove FNK0104B | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-fnk0104b` | `tools/impo/board.sh build fnk0104b` |
 | VN ESP32-S3 1.83-inch NV3023 | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-vn-s3-183` | `tools/impo/board.sh build vn183` |
 | Guition JC3248W535 | `esp32s3` | `devices/sdkconfig.impo;devices/sdkconfig.impo-guition-jc3248w535` | `tools/impo/board.sh build jc3248w535` |

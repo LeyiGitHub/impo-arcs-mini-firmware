@@ -35,8 +35,8 @@ code for it. Clone the repo rather than reading it on the web, and search it.
 | Seeed SenseCAP Watcher | [Seeed-Studio/SenseCAP-Watcher-Firmware](https://github.com/Seeed-Studio/SenseCAP-Watcher-Firmware) | `components/sensecap-watcher/` is Seeed's BSP. `include/sensecap-watcher.h` has the pins for the LCD, touch, knob, IO expander, audio, battery, SD card and the Himax camera chip (driven through `components/sscma_client/`). `examples/factory_firmware/` is the firmware it ships with. xiaozhi-esp32's [sensecap-watcher board](https://github.com/78/xiaozhi-esp32/tree/main/main/boards/sensecap-watcher) is a second reference. |
 | Every M5Stack board (StickS3, StickC Plus2, Cardputer ADV, StopWatch, CoreS3, Core2) | [m5stack/M5Unified](https://github.com/m5stack/M5Unified), and [M5GFX](https://github.com/m5stack/M5GFX) for the panels | `src/M5Unified.inl` for pins, buttons and audio. `src/utility/` for power and the battery (`Power_Class.inl`), the IMU, RTC, mic, speaker and LEDs. `src/M5GFX.cpp` in M5GFX for the panel. Search both for the model's `board_M5...` name. For the StopWatch, M5's factory firmware [m5stack/M5StopWatch-UserDemo](https://github.com/m5stack/M5StopWatch-UserDemo): `main/hal/` for the power chip, IO expander, buttons and audio, and `main/apps/app_stopwatch/view/view.cpp` for where the buttons sit. For the Core2, Espressif's BSP [esp-bsp/bsp/m5stack_core_2](https://github.com/espressif/esp-bsp/tree/master/bsp/m5stack_core_2): `m5stack_core_2.c` for the AXP rail setup, display, touch and speaker init. |
 | Espressif ESP32-S3-BOX-3 | [espressif/esp-bsp](https://github.com/espressif/esp-bsp) | `bsp/esp-box-3/`: pins in `include/bsp/esp-box-3.h`, LCD/touch revision detection and codecs in `esp-box-3.c`, duplex I2S in `esp-box-3_idf5.c`. |
-| M5Stack CoreS3 | [espressif/esp-bsp](https://github.com/espressif/esp-bsp) | `bsp/m5stack_core_s3/`: pins in `include/bsp/m5stack_core_s3.h`, the AXP2101 rails and AW9523 lines each part needs in `src/bsp_feature_en.c` and `src/bsp_io_expander.c`, codecs in `src/bsp_audio.c`. Impo drives it through that BSP, `espressif/m5stack_core_s3`. |
-| M5Stack StackChan (the body under a CoreS3) | [m5stack/StackChan](https://github.com/m5stack/StackChan) (MIT) | `firmware/main/hal/`: `hal_servo.cpp` (SCS0009 ids, zero positions, limits), `hal_io_expander.cpp` (PY32 pins: servo power, LEDs), `hal_head_touch.cpp` (Si12T zones and gestures), and `firmware/main/drivers/` for the register maps |
+| M5Stack CoreS3 | [espressif/esp-bsp](https://github.com/espressif/esp-bsp) | `bsp/m5stack_core_s3/`: pins in `include/bsp/m5stack_core_s3.h`, the AXP2101 rails and AW9523 lines each part needs in `src/bsp_feature_en.c` and `src/bsp_io_expander.c`, codecs in `src/bsp_audio.c`. Impo drives it through that BSP, `espressif/m5stack_core_s3`. For the camera and BMI270, M5Stack's [StackChan firmware](https://github.com/m5stack/StackChan): `firmware/main/hal/board/stackchan.cc` (esp_video setup) and `hal/drivers/bmi270/`, copied into `m5stack-cores3/vendor/`. |
+| M5Stack StackChan (the body under a CoreS3) | [m5stack/StackChan](https://github.com/m5stack/StackChan) (MIT) | `firmware/main/hal/` and `firmware/main/stackchan/`, copied unchanged into `m5stack-stackchan/vendor/m5stack/` (its `README.md` names the commit). Update by copying a newer release over them. |
 | Xteink X4 (SSD1677) | [FreeInk SDK](https://github.com/Free-Ink/freeink-sdk/tree/111fdcc7f0176c3ee38391a160ee296bf492dbd8) | `libs/hardware/BoardConfig/include/BoardConfig.h`, `InputManager`, and `libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp`. Original C3 X4 only; not X3, Pro, Classic, or UltraChip batches. |
 | FoloToy AI Passport | [FoloToy/ai-passport](https://github.com/FoloToy/ai-passport) | `components/bsp/include/bsp_pins.h` for every pin, the button ladder's windows and the I2C addresses. `components/bsp/src/` for the ST7789P3's init table (`bsp_display.c`), the ES8311 setup (`bsp_audio.c`, keep `no_dac_ref`) and the CW2017 gauge (`bsp_battery.c`). `docs/hardware-design/` has the hardware guide. |
 | AIPI Lite | xiaozhi-esp32's [aipi-lite board](https://github.com/78/xiaozhi-esp32/tree/main/main/boards/xorigin/aipi-lite) | `config.h` for pins, then `aipi-lite.cc` and `power_manager.h`. |
@@ -176,6 +176,14 @@ A single addressable LED on another pin needs only the overlay:
 follows the same two steps. Copy `DEVKIT_GPIO27` (addressable) or `PWM_RGB`.
 
 ## 6. Boards with the full UI: add a board
+
+A new board goes in a device folder instead (`README.md`, Device folders):
+`device.json`, an `sdkconfig` with `CONFIG_IMPO_BOARD_DEVICE=y`, and the board
+code as the folder's own component, as `m5stack-cores3/` does. A product that
+is a known board in a body names that board as its `base` and adds only the
+body, as `m5stack-stackchan/` does. Copy a vendor's code into `vendor/`
+unchanged, with its licence and source, and build around it. The steps below
+are for the boards still on overlays.
 
 1. **Kconfig.** In `components/impo/Kconfig`, add `config IMPO_BOARD_<NAME>`
    to the `IMPO_BOARD` choice with `depends on IDF_TARGET_<CHIP>`. Then add
