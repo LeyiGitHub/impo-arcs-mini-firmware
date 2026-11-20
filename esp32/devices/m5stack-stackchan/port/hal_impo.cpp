@@ -41,6 +41,16 @@ void Hal::init()
 {
     head_touch_init();
     io_expander_init();
+    /* M5Stack's firmware starts from a cold boot, with the servos newly
+     * powered. A reset of the ESP32 alone (flashing, a crash, a restart)
+     * leaves the PY32 and the servo power on, and a servo that stopped
+     * answering (after a stall) answers again only once its power has gone
+     * off and on. So start as from a cold boot: io_expander_init has switched
+     * the power on; switch it off and on again before the servos start. */
+    setServoPowerEnabled(false);
+    delay(500);
+    setServoPowerEnabled(true);
+    delay(500);     /* the servos answer about half a second after power-on */
     servo_init();
 }
 
