@@ -57,9 +57,8 @@ EVENTS = [
                     "stroke (a hand moved along the head). The robot's LEDs already glowed pink. Sent at "
                     "most every 5 seconds."},
     {"name": "shaken",
-     "description": "Someone shook the robot (its head, where the motion sensor is): peak_g is the strongest "
-                    "jolt in g, strength gentle or hard. The robot has already turned its head back to the "
-                    "middle and holds it still for a few seconds. Sent at most every 8 seconds."},
+     "description": "Someone shook the robot's head: peak_g is the strongest jolt in g, strength gentle or "
+                    "hard. The head is already back in the middle, held still a few seconds. At most every 8 s."},
 ]
 
 
@@ -194,6 +193,8 @@ def main():
     product = re.search(r'^CONFIG_GADGET_PRODUCT_ID="([^"]+)"', OVERLAY.read_text(), re.M)
     if not product:
         sys.exit(f"no CONFIG_GADGET_PRODUCT_ID in {OVERLAY.name}")
+    for e in EVENTS:
+        assert 1 <= len(e["description"]) <= 200, (e["name"], len(e["description"]))
     json.dump({"product": product.group(1), "minFirmware": a.min_firmware, "systemPrompt": SYSTEM_PROMPT, "commands": commands,
                "events": EVENTS}, sys.stdout, ensure_ascii=False, indent=2)
     print()
