@@ -12,7 +12,7 @@ idf_component_register(
          "${m5}/hal/hal_head_touch.cpp"
          "${m5}/hal/drivers/FTServo_Arduino/src/SCS.cpp"
          "${m5}/hal/drivers/FTServo_Arduino/src/SCSCL.cpp"
-         "${m5}/hal/drivers/FTServo_Arduino/src/SCSerial.cpp"
+         "port/SCSerial.cpp"   # M5Stack's, with faster reads (vendor/README.md)
          "${m5}/hal/drivers/PY32IOExpander_Class/PY32IOExpander_Class.cpp"
          "${m5}/hal/drivers/Si12T/Si12T.cpp"
          "${m5}/stackchan/stackchan.cpp"
@@ -28,10 +28,10 @@ idf_component_register(
     WHOLE_ARCHIVE   # m5stack_cores3_body and M5Stack's static objects
 )
 
-# M5Stack's code is built as M5Stack builds it, not under this project's
-# warnings-as-errors.
+# M5Stack's code (and port/SCSerial.cpp, a copy of one of its files) is built
+# as M5Stack builds it, not under this project's warnings-as-errors.
 file(GLOB_RECURSE vendored CONFIGURE_DEPENDS "${COMPONENT_DIR}/vendor/*.c" "${COMPONENT_DIR}/vendor/*.cc" "${COMPONENT_DIR}/vendor/*.cpp")
-set_source_files_properties(${vendored} PROPERTIES COMPILE_OPTIONS "-Wno-error")
+set_source_files_properties(${vendored} "port/SCSerial.cpp" PROPERTIES COMPILE_OPTIONS "-Wno-error")
 # M5Stack's FeatureKeyframe leaves `size` unset, and its dances copy it into
 # the face; ImpoFace draws nothing, so the value goes nowhere.
 set_source_files_properties("stackchan.cpp" PROPERTIES COMPILE_OPTIONS "-Wno-error=uninitialized;-Wno-error=maybe-uninitialized")

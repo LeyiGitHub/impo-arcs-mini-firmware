@@ -34,6 +34,7 @@
 
 #include "cJSON.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -49,7 +50,11 @@ using namespace stackchan;
 namespace {
 
 constexpr const char *TAG = "stackchan";
-constexpr int TICK_MS = 20;                 /* M5Stack's update period */
+/* M5Stack's animations step a fixed 20 ms per update and skip an update that
+ * comes less than 20 ms after the last, so the loop runs every 21 ms counted
+ * from the start of each pass: the servo bus takes several ms a pass, and a
+ * longer period slows and shrinks every move. */
+constexpr int64_t PERIOD_US = 21000;
 /* Head limits in degrees; M5Stack's servos allow yaw -128..128, pitch 3..87. */
 constexpr double YAW_MAX = 120, PITCH_MIN = 0, PITCH_MAX = 85;
 constexpr int SPEED_DEFAULT = 150;          /* M5Stack: "150 is natural" */
@@ -253,8 +258,17 @@ void on_touch(HeadPetGesture g, uint32_t now)
 
 void update_task(void *)
 {
+    int64_t next = esp_timer_get_time();
     while (true) {
-        vTaskDelay(pdMS_TO_TICKS(TICK_MS));
+        next += PERIOD_US;
+        int64_t wait_us = next - esp_timer_get_time();
+        if (wait_us < 1000) {
+            /* A pass overran (a servo did not answer): start the next one
+             * from now rather than catch up with passes in a row. */
+            next = esp_timer_get_time() + 1000;
+            wait_us = 1000;
+        }
+        vTaskDelay(pdMS_TO_TICKS((wait_us + 999) / 1000));
         std::lock_guard<std::recursive_timed_mutex> lock(s_lock);
         auto &stackchan = GetStackChan();
         uint32_t now = now_ms();
