@@ -651,7 +651,7 @@ static noise_upgrade_result_t ws_upgrade(esp_tls_t *tls) {
     if (write_all(tls, req, req_len) != req_len) {
         ESP_LOGE(TAG, "upgrade write failed");
         free(req);
-        return NOISE_UPGRADE_FAILED;
+        return NOISE_UPGRADE_NO_ANSWER;
     }
     free(req);
 
@@ -712,6 +712,10 @@ static noise_upgrade_result_t ws_upgrade(esp_tls_t *tls) {
             break;
         }
     }
+    if (have == 0) {
+        ESP_LOGW(TAG, "no answer to the upgrade request");
+        result = NOISE_UPGRADE_NO_ANSWER;
+    }
 
     free(hdr);
     return result;
@@ -719,26 +723,39 @@ static noise_upgrade_result_t ws_upgrade(esp_tls_t *tls) {
 
 // ---- Noise handshake --------------------------------------------------------
 
-static bool noise_handshake(esp_tls_t *tls, ClientSession &session,
-                            uint8_t *scratch, size_t scratch_len) {
+// Why a handshake failed. NO_ANSWER is the network: a message didn't go out,
+// or msg2 didn't arrive before its deadline. Anything the server said — a
+// close, a reset, a msg2 that doesn't verify — is REFUSED.
+enum handshake_result_t {
+    HANDSHAKE_OK,
+    HANDSHAKE_REFUSED,
+    HANDSHAKE_NO_ANSWER,
+};
+
+static handshake_result_t noise_handshake(esp_tls_t *tls, ClientSession &session,
+                                          uint8_t *scratch, size_t scratch_len) {
     // msg1: initiator → responder
     ByteSpan out_span(scratch, scratch_len);
     auto msg1 = session.WriteHandshakeMessage1(out_span);
     if (!msg1.ok()) {
         ESP_LOGE(TAG, "WriteHandshakeMessage1 failed: %s", msg1.status().str());
-        return false;
+        return HANDSHAKE_REFUSED;
     }
     if (!ws_send_binary(tls, scratch, msg1.size())) {
         ESP_LOGE(TAG, "failed to send handshake msg1");
-        return false;
+        return HANDSHAKE_NO_ANSWER;
     }
     ESP_LOGI(TAG, "handshake msg1 sent (%u bytes)", (unsigned)msg1.size());
 
     // msg2: responder → initiator
+    int64_t msg2_wait_from = esp_timer_get_time();
     ssize_t msg2_len = ws_recv_frame(tls, scratch, scratch_len);
     if (msg2_len <= 0) {
-        ESP_LOGE(TAG, "failed to receive handshake msg2: %d", (int)msg2_len);
-        return false;
+        bool timed_out = msg2_len < 0
+                         && esp_timer_get_time() - msg2_wait_from >= WS_FRAME_TIMEOUT_US;
+        ESP_LOGE(TAG, "failed to receive handshake msg2: %d%s", (int)msg2_len,
+                 timed_out ? " (timed out)" : "");
+        return timed_out ? HANDSHAKE_NO_ANSWER : HANDSHAKE_REFUSED;
     }
     ESP_LOGI(TAG, "handshake msg2 received (%d bytes)", (int)msg2_len);
 
@@ -750,7 +767,7 @@ static bool noise_handshake(esp_tls_t *tls, ClientSession &session,
         peer_extra_written);
     if (!status2.ok()) {
         ESP_LOGE(TAG, "ReadHandshakeMessage2 failed: %s", status2.str());
-        return false;
+        return HANDSHAKE_REFUSED;
     }
 
     // msg3: initiator → responder.
@@ -774,15 +791,15 @@ static bool noise_handshake(esp_tls_t *tls, ClientSession &session,
     auto msg3 = session.WriteHandshakeMessage3(auth_payload, out_span);
     if (!msg3.ok()) {
         ESP_LOGE(TAG, "WriteHandshakeMessage3 failed: %s", msg3.status().str());
-        return false;
+        return HANDSHAKE_REFUSED;
     }
     if (!ws_send_binary(tls, scratch, msg3.size())) {
         ESP_LOGE(TAG, "failed to send handshake msg3");
-        return false;
+        return HANDSHAKE_NO_ANSWER;
     }
     ESP_LOGI(TAG, "handshake msg3 sent (%u bytes), session established",
              (unsigned)msg3.size());
-    return session.isEstablished();
+    return session.isEstablished() ? HANDSHAKE_OK : HANDSHAKE_REFUSED;
 }
 
 // ---- Session: send Noise-encrypted WS frames --------------------------------
@@ -1702,6 +1719,9 @@ enum session_result_t {
     SESSION_OK,
     SESSION_FAILED,
     SESSION_AUTH_FAILED,
+    // Nothing answered: TLS to the edge failed, or the upgrade or handshake
+    // went unanswered. The server never saw or judged the credentials.
+    SESSION_NETWORK_FAILED,
 };
 
 static bool update_reconnect_policy(session_result_t result,
@@ -1711,6 +1731,15 @@ static bool update_reconnect_policy(session_result_t result,
     if (result == SESSION_AUTH_FAILED) {
         *short_failures = 0;
         *backoff_ms = RECONNECT_AUTH_FAILED_MS;
+        return false;
+    }
+    // A network failure backs off like any other but doesn't count toward a
+    // VM refresh: new credentials can't fix a path that doesn't answer, and
+    // fetching them is one more HTTPS request over that path. On a lossy
+    // uplink every third failed connect used to ask for one.
+    if (result == SESSION_NETWORK_FAILED) {
+        *backoff_ms *= 2;
+        if (*backoff_ms > RECONNECT_MAX_MS) *backoff_ms = RECONNECT_MAX_MS;
         return false;
     }
     if (up_ms > STABLE_SESSION_MS) {
@@ -1849,7 +1878,7 @@ static session_result_t run_session(stack_monitor_t *stack) {
     if (r != 1) {
         ESP_LOGE(TAG, "TLS connect failed: %d", r);
         esp_tls_conn_destroy(tls);
-        return SESSION_FAILED;
+        return SESSION_NETWORK_FAILED;
     }
     ESP_LOGI(TAG, "TLS connected to %s:%d (vm_id=%s)", s_noise_host, NOISE_PORT, s_vm_id);
 
@@ -1861,8 +1890,10 @@ static session_result_t run_session(stack_monitor_t *stack) {
         // blip. Saying so takes the 60s auth backoff instead of the 15s
         // network cap, and raises ws_auth_failed so app.c re-fetches the
         // token from fetch_vms — the only thing that can actually fix it.
+        // No answer at all is the network, which only backoff can wait out.
         return upgrade == NOISE_UPGRADE_AUTH_REJECTED ? SESSION_AUTH_FAILED
-                                                     : SESSION_FAILED;
+               : upgrade == NOISE_UPGRADE_NO_ANSWER   ? SESSION_NETWORK_FAILED
+                                                      : SESSION_FAILED;
     }
     ESP_LOGI(TAG, "WebSocket upgraded to %s", NOISE_PATH);
 
@@ -1905,9 +1936,11 @@ static session_result_t run_session(stack_monitor_t *stack) {
     {  // Scoped block for event loop — avoids goto crossing variable init.
 
     // 3. Noise handshake
-    if (!noise_handshake(tls, session, ws_buf, ws_buf_size)) {
+    handshake_result_t handshake = noise_handshake(tls, session, ws_buf, ws_buf_size);
+    if (handshake != HANDSHAKE_OK) {
         ESP_LOGE(TAG, "Noise handshake failed");
-        result = SESSION_AUTH_FAILED;
+        result = handshake == HANDSHAKE_NO_ANSWER ? SESSION_NETWORK_FAILED
+                                                  : SESSION_AUTH_FAILED;
         goto cleanup;
     }
     session_generation = noise_ctrl_next_session_generation(

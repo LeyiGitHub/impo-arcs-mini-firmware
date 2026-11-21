@@ -29,6 +29,9 @@ typedef enum {
     NOISE_UPGRADE_OK = 0,
     NOISE_UPGRADE_FAILED,
     NOISE_UPGRADE_AUTH_REJECTED,
+    // The request didn't go out, or not one byte came back: the network
+    // failed and the edge never judged the bearer.
+    NOISE_UPGRADE_NO_ANSWER,
 } noise_upgrade_result_t;
 
 // Worst-case output size for noise_upgrade_query_escape(), including the NUL.

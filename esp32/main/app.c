@@ -1075,23 +1075,30 @@ static bool connect_preferred_vm_with_gate_held(uint32_t session_generation) {
     return ok;
 }
 
-static void finish_vm_auth_refresh_task(void) {
+static void finish_vm_auth_refresh(void) {
     auth_lock_take();
     s_vm_auth_refresh_pending = false;
     auth_lock_give();
 }
 
-static void vm_auth_refresh_task(void *arg) {
-    (void)arg;
+// The heartbeat runs the refresh that schedule_vm_auth_refresh() asked for.
+// It fetches the VM list over HTTPS, which needs an 8 KB stack, and a task of
+// its own needs that much internal RAM in one block. By the time a session
+// keeps failing there is seldom such a block left (a StackChan had 13 KB free,
+// 7 KB the largest), so the task never started and the refresh never ran. The
+// heartbeat has the stack already: it is how impo_keep_vm_session() connects.
+static void run_pending_vm_auth_refresh(void) {
+    auth_lock_take();
+    bool pending = s_vm_auth_refresh_pending;
+    auth_lock_give();
+    if (!pending) return;
 
     bool have_operation_gate = false;
     if (s_operation_gate) {
         have_operation_gate = operation_gate_take(0, "VM credential refresh");
         if (!have_operation_gate) {
             ESP_LOGI(TAG, "skipping VM credential refresh; another operation is active");
-            finish_vm_auth_refresh_task();
-            stack_monitor_record(NULL);
-            vTaskDelete(NULL);
+            finish_vm_auth_refresh();
             return;
         }
     }
@@ -1108,11 +1115,12 @@ static void vm_auth_refresh_task(void *arg) {
     if (have_operation_gate) {
         operation_gate_give();
     }
-    finish_vm_auth_refresh_task();
-    stack_monitor_record(NULL);
-    vTaskDelete(NULL);
+    finish_vm_auth_refresh();
 }
 
+// Called on the Noise control task, which can't refresh inline (connecting
+// the new VM waits for that task to exit), so this only marks the refresh for
+// the heartbeat, at most one in each refresh interval.
 static void schedule_vm_auth_refresh(void) {
     int64_t now = esp_timer_get_time();
     auth_lock_take();
@@ -1129,13 +1137,6 @@ static void schedule_vm_auth_refresh(void) {
     s_vm_auth_refresh_pending = true;
     s_last_vm_auth_refresh_attempt_us = now;
     auth_lock_give();
-
-    if (xTaskCreate(vm_auth_refresh_task, "vm_auth_rfsh", 8192, NULL, 4, NULL) != pdPASS) {
-        auth_lock_take();
-        s_vm_auth_refresh_pending = false;
-        auth_lock_give();
-        ESP_LOGE(TAG, "failed to start VM credential refresh task");
-    }
 }
 
 // ---- BLE callbacks ---------------------------------------------------------
@@ -2977,6 +2978,7 @@ void app_run(void) {
 #if CONFIG_IMPO_ENABLED
         impo_keep_vm_session();
 #endif
+        run_pending_vm_auth_refresh();
 
         // Runs on every heartbeat tick, and does two things.
         //

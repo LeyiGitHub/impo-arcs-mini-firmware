@@ -175,6 +175,43 @@ class LinkTransportContractTest(unittest.TestCase):
         )
         self.assertIn(": SESSION_FAILED;", rejected)
 
+    def test_unanswered_connects_are_network_failures(self) -> None:
+        """A connect nobody answered backs off without asking for new credentials.
+
+        link_noise_transport_harness.cpp runs the policy and the upgrade
+        classification. This checks the links the harness can't reach: a TLS
+        failure and an unanswered handshake report SESSION_NETWORK_FAILED,
+        while a handshake the server refused still reports SESSION_AUTH_FAILED.
+        """
+        source = NOISE_CONTROL_CPP.read_text()
+        session = _function_body(source, "static session_result_t run_session(")
+        tls_failed = _function_body(session, "if (r != 1)")
+        self.assertIn("return SESSION_NETWORK_FAILED;", tls_failed)
+        rejected = _function_body(session, "if (upgrade != NOISE_UPGRADE_OK)")
+        self.assertIn("upgrade == NOISE_UPGRADE_NO_ANSWER   ? SESSION_NETWORK_FAILED", rejected)
+        handshake_failed = _function_body(session, "if (handshake != HANDSHAKE_OK)")
+        self.assertIn("handshake == HANDSHAKE_NO_ANSWER ? SESSION_NETWORK_FAILED", handshake_failed)
+        self.assertIn(": SESSION_AUTH_FAILED;", handshake_failed)
+
+        handshake = _function_body(source, "static handshake_result_t noise_handshake(")
+        msg2 = _function_body(handshake, "if (msg2_len <= 0)")
+        self.assertIn(">= WS_FRAME_TIMEOUT_US", msg2)
+        self.assertIn("return timed_out ? HANDSHAKE_NO_ANSWER : HANDSHAKE_REFUSED;", msg2)
+        self.assertIn("return HANDSHAKE_REFUSED;",
+                      _function_body(handshake, "if (!status2.ok())"))
+
+    def test_vm_refresh_runs_on_the_heartbeat(self) -> None:
+        """No task of its own: its 8 KB stack seldom fits once sessions fail."""
+        source = APP_C.read_text()
+        schedule = _function_body(source, "static void schedule_vm_auth_refresh(")
+        self.assertNotIn("xTaskCreate", schedule)
+        self.assertIn("s_vm_auth_refresh_pending = true;", schedule)
+        refresh = _function_body(source, "static void run_pending_vm_auth_refresh(")
+        self.assertIn('operation_gate_take(0, "VM credential refresh")', refresh)
+        self.assertIn("connect_preferred_vm_with_gate_held(0)", refresh)
+        app_run = _function_body(source, "void app_run(")
+        self.assertIn("run_pending_vm_auth_refresh();", app_run)
+
     def test_websocket_control_commands_run_outside_ble(self) -> None:
         source = APP_C.read_text()
         handler = _function_body(source, "static cJSON *on_ws_command(")

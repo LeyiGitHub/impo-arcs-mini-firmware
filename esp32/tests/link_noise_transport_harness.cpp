@@ -94,6 +94,8 @@ static void test_upgrade_status_classification(void) {
     expect_status("HTTP/1.1 500 Internal Server Error\r\n\r\n", SESSION_FAILED);
     expect_status("not http\r\n\r\n", SESSION_FAILED);
     expect_status("HTTP/1", SESSION_FAILED);
+    // Not one byte back: the edge never judged the bearer.
+    expect_status("", SESSION_NETWORK_FAILED);
 }
 
 static void test_reconnect_policy_requests_vm_refresh_after_short_failures(void) {
@@ -136,10 +138,25 @@ static void test_reconnect_policy_auth_failure_uses_long_backoff(void) {
     CHECK(failures == 0, "auth failure should reset generic failures");
 }
 
+static void test_reconnect_policy_network_failures_never_request_refresh(void) {
+    uint32_t backoff = 1000;
+    uint8_t failures = 2;
+
+    for (int i = 0; i < 5; i++) {
+        CHECK(update_reconnect_policy(SESSION_NETWORK_FAILED, 100, &backoff, &failures) == 0,
+              "network failure %d should not request VM refresh", i + 1);
+    }
+    CHECK(backoff == RECONNECT_MAX_MS, "network failures should back off to the cap, got %u",
+          (unsigned)backoff);
+    CHECK(failures == 2, "network failures should neither count nor clear short failures, got %u",
+          failures);
+}
+
 int main(void) {
     test_reconnect_policy_requests_vm_refresh_after_short_failures();
     test_reconnect_policy_resets_after_stable_session();
     test_reconnect_policy_auth_failure_uses_long_backoff();
+    test_reconnect_policy_network_failures_never_request_refresh();
     test_upgrade_status_classification();
     CHECK(classification_failures == 0, "%u HTTP auth classification cases failed",
           classification_failures);
