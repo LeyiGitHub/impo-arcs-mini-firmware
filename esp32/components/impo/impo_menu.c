@@ -354,7 +354,8 @@ static void show(view_t view)
     case VIEW_POWER: {
         char text[96];
         snprintf(text, sizeof(text), "Turn Impo off?\n\nPress the %s button to turn it back on.",
-                 impo_board->keyboard ? "GO" : impo_board->aux_button);
+                 impo_board->keyboard ? "GO"
+                 : impo_board->aux_button ? impo_board->aux_button : impo_board->talk_button);
         set_text(s_title, "POWER OFF");
         set_text(s_page, text);
         set_text(s_hint_down, impo_board->keyboard ? "Esc Cancel" : "Cancel");

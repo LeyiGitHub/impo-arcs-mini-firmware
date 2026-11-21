@@ -63,8 +63,8 @@ typedef struct {
     bool touch;             /* no touch: no settings screen, set up over BLE */
     float diagonal_in;      /* screen size; under 2" typing uses a keypad with bigger keys */
     bool keyboard;          /* dedicated menu navigation keys */
-    const char *talk_button;    /* where the buttons are, for captions: "top" */
-    const char *aux_button;     /* "bottom" */
+    const char *talk_button;    /* where the buttons are, for captions: "top"; every board has one */
+    const char *aux_button;     /* "bottom"; NULL when there's none */
     impo_button_hint_t talk_hint;   /* mic icon; the menu's hints follow both */
     impo_button_hint_t aux_hint;    /* power or menu icon; left out, there's none */
     /* The menu turns a right-edge aux button's hint on end, which LVGL draws
