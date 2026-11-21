@@ -365,9 +365,14 @@ static bool op_hatch_linked(void) {
     return s_linked;
 }
 
-static bool op_hatch_vm(const char *want_vm, char *vm_id, size_t id_cap, char *vm_name, size_t name_cap,
-                        char **vm_token) {
-    return s_linked && app_hatch_vm_credentials(want_vm, vm_id, id_cap, vm_name, name_cap, vm_token);
+static impo_link_vm_t op_hatch_vm(const char *want_vm, bool fresh, char *vm_id, size_t id_cap,
+                                  char *vm_name, size_t name_cap, char **vm_token) {
+    if (!s_linked) return IMPO_LINK_VM_FAILED;
+    switch (app_hatch_vm_credentials(want_vm, fresh, vm_id, id_cap, vm_name, name_cap, vm_token)) {
+    case APP_HATCH_VM_OK: return IMPO_LINK_VM_OK;
+    case APP_HATCH_VM_BUSY: return IMPO_LINK_VM_BUSY;
+    default: return IMPO_LINK_VM_FAILED;
+    }
 }
 
 static bool op_talk_press(void) {

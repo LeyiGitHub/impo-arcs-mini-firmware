@@ -54,11 +54,15 @@ bool impo_link_hatch_linked(void) {
     return atomic_load(&s_linked);
 }
 
-// app_hatch_vm_credentials does its work on a task of its own.
-bool impo_link_hatch_vm(const char *want_vm, char *vm_id, size_t id_cap, char *vm_name,
-                        size_t name_cap, char **vm_token) {
-    return atomic_load(&s_linked) &&
-           app_hatch_vm_credentials(want_vm, vm_id, id_cap, vm_name, name_cap, vm_token);
+// app_hatch_vm_credentials touches only RAM here; the heartbeat looks it up.
+impo_link_vm_t impo_link_hatch_vm(const char *want_vm, bool fresh, char *vm_id, size_t id_cap,
+                                  char *vm_name, size_t name_cap, char **vm_token) {
+    if (!atomic_load(&s_linked)) return IMPO_LINK_VM_FAILED;
+    switch (app_hatch_vm_credentials(want_vm, fresh, vm_id, id_cap, vm_name, name_cap, vm_token)) {
+    case APP_HATCH_VM_OK: return IMPO_LINK_VM_OK;
+    case APP_HATCH_VM_BUSY: return IMPO_LINK_VM_BUSY;
+    default: return IMPO_LINK_VM_FAILED;
+    }
 }
 
 bool impo_wifi_connected(void) {

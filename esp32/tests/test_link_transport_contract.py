@@ -212,6 +212,54 @@ class LinkTransportContractTest(unittest.TestCase):
         app_run = _function_body(source, "void app_run(")
         self.assertIn("run_pending_vm_auth_refresh();", app_run)
 
+    def test_hatch_session_takes_links_vm_credential(self) -> None:
+        """Impo's chat session connects with the credential Link already has.
+
+        It used to fetch the VM list again on a task of its own, after waiting
+        up to 15 s for the operation gate while Link fetched the same list; a
+        gate wait it lost read "Can't reach Impo's server".
+        """
+        source = APP_C.read_text()
+        connect = _function_body(source, "static bool connect_vm_target(")
+        self.assertIn("remember_hatch_vm(vm_id, target->vm_name, auth_token, true);", connect)
+
+        # The caller's stack is in PSRAM: RAM only, no NVS, no task of its own.
+        lookup = _function_body(source, "app_hatch_vm_t app_hatch_vm_credentials(")
+        self.assertNotIn("xTaskCreate", lookup)
+        self.assertNotIn("config_", lookup)
+        self.assertLess(lookup.index("remembered_hatch_vm("), lookup.index("s_hatch_vm_request = &req"))
+        self.assertIn("if (withdrawn) return APP_HATCH_VM_BUSY;", lookup)
+
+        heartbeat = _function_body(source, "static void run_pending_hatch_vm_lookup(")
+        self.assertIn('operation_gate_take(0, "Impo VM lookup")', heartbeat)
+        self.assertIn("req->result = APP_HATCH_VM_BUSY;", heartbeat)
+        self.assertIn("remember_hatch_vm(", heartbeat)
+        # Once done is set the waiter may return and take req with it.
+        self.assertLess(heartbeat.index("TaskHandle_t waiter = req->waiter;"),
+                        heartbeat.index("atomic_store(&req->done, true);"))
+        self.assertLess(heartbeat.index("atomic_store(&req->done, true);"),
+                        heartbeat.index("xTaskNotifyGive(waiter);"))
+        app_run = _function_body(source, "void app_run(")
+        self.assertIn("run_pending_hatch_vm_lookup();", app_run)
+
+    def test_hatch_session_waits_for_link_without_backing_off(self) -> None:
+        source = (ROOT / "components" / "impo" / "impo_chat_session.cpp").read_text()
+        self.assertIn("#define AUTO_RETRY_MAX_US (30 * 1000000LL)", source)
+
+        resolve = _function_body(source, "static bool resolve_vm(")
+        busy = _function_body(resolve, "if (got == IMPO_LINK_VM_BUSY)")
+        self.assertIn("s_link_busy = true;", busy)
+
+        ensure = _function_body(source, "static bool ensure_connected(")
+        self.assertIn("resolve_vm(err, sizeof(err), attempt > 0)", ensure)
+        waiting = _function_body(ensure, "if (s_link_busy)")
+        self.assertIn("impo_hatch_report(IMPO_HATCH_TESTING", waiting)
+
+        task = _function_body(source, "static void hatch_task(")
+        retry = _function_body(task, "} else if (s_link_busy) {")
+        self.assertIn("s_auto_next_us = now_us() + LINK_WAIT_US;", retry)
+        self.assertNotIn("s_auto_backoff_us", retry)
+
     def test_websocket_control_commands_run_outside_ble(self) -> None:
         source = APP_C.read_text()
         handler = _function_body(source, "static cJSON *on_ws_command(")

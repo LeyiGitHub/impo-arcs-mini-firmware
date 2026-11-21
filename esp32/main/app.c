@@ -1021,6 +1021,72 @@ static int fetch_vms_with_refresh_with_gate_held(vm_info_t *vms, int max) {
     return count;
 }
 
+#if CONFIG_IMPO_ENABLED || CONFIG_HOMEHUB_VOICE
+static void *psram_malloc(size_t sz);
+
+// The VM Link last chose and the credential it connects with. Impo's own
+// Hatch session connects to the same VM, so app_hatch_vm_credentials() hands
+// it these rather than fetching the VM list again, which meant waiting for
+// the operation gate while Link fetched it. Guarded by s_hatch_vm_lock, not
+// the auth lock, which a token refresh holds through its HTTPS request.
+static struct {
+    char vm_id[128];
+    char vm_name[64];
+    char *token;      // in PSRAM where there is some: internal RAM is scarce
+    bool preferred;   // Link's own pick: what an empty want_vm asks for
+} s_hatch_vm;
+
+static SemaphoreHandle_t s_hatch_vm_lock;   // s_hatch_vm and s_hatch_vm_request
+
+static void hatch_lock_take(void) {
+    if (s_hatch_vm_lock) xSemaphoreTake(s_hatch_vm_lock, portMAX_DELAY);
+}
+
+static void hatch_lock_give(void) {
+    if (s_hatch_vm_lock) xSemaphoreGive(s_hatch_vm_lock);
+}
+
+static char *psram_strdup(const char *s) {
+    size_t n = strlen(s) + 1;
+    char *p = psram_malloc(n);
+    if (p) memcpy(p, s, n);
+    return p;
+}
+
+static void remember_hatch_vm(const char *vm_id, const char *vm_name, const char *token,
+                              bool preferred) {
+    char *copy = psram_strdup(token);
+    if (!copy) return;   // keep the last one rather than none
+    hatch_lock_take();
+    free(s_hatch_vm.token);
+    s_hatch_vm.token = copy;
+    strlcpy(s_hatch_vm.vm_id, vm_id, sizeof(s_hatch_vm.vm_id));
+    strlcpy(s_hatch_vm.vm_name, vm_name ? vm_name : "", sizeof(s_hatch_vm.vm_name));
+    s_hatch_vm.preferred = preferred;
+    hatch_lock_give();
+}
+
+// The remembered VM, when it is the one asked for. RAM only, so safe on the
+// Hatch session's PSRAM stack. *vm_token is heap.
+static bool remembered_hatch_vm(const char *want_vm, char *vm_id, size_t id_cap,
+                                char *vm_name, size_t name_cap, char **vm_token) {
+    bool want_any = !want_vm || !want_vm[0];
+    bool found = false;
+    hatch_lock_take();
+    if (s_hatch_vm.token
+        && (want_any ? s_hatch_vm.preferred : strcmp(want_vm, s_hatch_vm.vm_id) == 0)) {
+        *vm_token = psram_strdup(s_hatch_vm.token);
+        if (*vm_token) {
+            strlcpy(vm_id, s_hatch_vm.vm_id, id_cap);
+            strlcpy(vm_name, s_hatch_vm.vm_name, name_cap);
+            found = true;
+        }
+    }
+    hatch_lock_give();
+    return found;
+}
+#endif  // CONFIG_IMPO_ENABLED || CONFIG_HOMEHUB_VOICE
+
 static bool connect_vm_target(const vm_info_t *target) {
     // vm_connect_params() owns the whole admission decision: it refuses an
     // entry that cannot supply both an id and its own token, and there is no
@@ -1031,6 +1097,9 @@ static bool connect_vm_target(const vm_info_t *target) {
         ESP_LOGE(TAG, "no usable vm_id/token for VM entry");
         return false;
     }
+#if CONFIG_IMPO_ENABLED || CONFIG_HOMEHUB_VOICE
+    remember_hatch_vm(vm_id, target->vm_name, auth_token, true);
+#endif
 
     const char *network_ssid = strcmp(s_ui_wifi, "down") == 0 ? NULL : s_ui_wifi;
     bool ctrl_started = noise_ctrl_connect(vm_id, auth_token, network_ssid);
@@ -2456,14 +2525,22 @@ bool app_wifi_nap(void) {
 // Impo's and the voice board's own Hatch session reach the VM with these.
 typedef struct {
     const char *want_vm;
+    bool fresh;
     char *vm_id;
     size_t id_cap;
     char *vm_name;
     size_t name_cap;
     char *vm_token;
-    bool ok;
+    app_hatch_vm_t result;
+    atomic_bool done;
     TaskHandle_t waiter;
 } hatch_vm_request_t;
+
+// The lookup app_hatch_vm_credentials() waits on, for the heartbeat to run.
+// Guarded by s_hatch_vm_lock.
+static hatch_vm_request_t *s_hatch_vm_request;
+
+#define HATCH_VM_PICKUP_MS 6000   // a heartbeat tick (5 s) and a little
 
 static const vm_info_t *find_vm_by_id(const vm_info_t *vms, int count, const char *want) {
     for (int i = 0; i < count; i++) {
@@ -2476,11 +2553,28 @@ static const vm_info_t *find_vm_by_id(const vm_info_t *vms, int count, const cha
     return NULL;
 }
 
-// Runs on an internal-RAM stack: the caller's may be in PSRAM, and this reads
-// and (on token refresh) writes NVS.
-static void hatch_vm_task(void *arg) {
-    hatch_vm_request_t *req = arg;
-    if (config_is_provisioned() && operation_gate_take(pdMS_TO_TICKS(15000), "Impo VM lookup")) {
+// The heartbeat runs the lookup app_hatch_vm_credentials() asked for. It
+// fetches the VM list over HTTPS and may write NVS (a token refresh), which
+// needs an internal-RAM stack of 8 KB: the Hatch session's stack is in PSRAM,
+// and a task of its own seldom finds 8 KB of internal RAM in one block (see
+// run_pending_vm_auth_refresh()). The heartbeat has that stack already.
+static void run_pending_hatch_vm_lookup(void) {
+    hatch_lock_take();
+    hatch_vm_request_t *req = s_hatch_vm_request;
+    s_hatch_vm_request = NULL;
+    hatch_lock_give();
+    if (!req) return;
+
+    req->result = APP_HATCH_VM_FAILED;
+    if (!config_is_provisioned()) {
+        ESP_LOGW(TAG, "Impo VM lookup: not paired");
+    } else if (!req->fresh
+               && remembered_hatch_vm(req->want_vm, req->vm_id, req->id_cap,
+                                      req->vm_name, req->name_cap, &req->vm_token)) {
+        req->result = APP_HATCH_VM_OK;   // Link chose it while this waited
+    } else if (!operation_gate_take(0, "Impo VM lookup")) {
+        req->result = APP_HATCH_VM_BUSY;
+    } else {
         vm_info_t vms[VM_API_MAX_VMS];
         int count = fetch_vms_with_refresh_with_gate_held(vms, VM_API_MAX_VMS);
         if (count > 0) {
@@ -2488,6 +2582,7 @@ static void hatch_vm_task(void *arg) {
             if (req->want_vm && req->want_vm[0]) {
                 target = find_vm_by_id(vms, count, req->want_vm);
             }
+            bool by_id = target != NULL;
             char preferred[256] = {0};
             if (!target && config_get_str("vm_url", preferred, sizeof(preferred))
                 && preferred[0]) {
@@ -2496,32 +2591,58 @@ static void hatch_vm_task(void *arg) {
             if (!target) target = vm_find_default(vms, count);
             const char *token = NULL;
             if (target && vm_connect_params(target, req->vm_id, req->id_cap, &token)) {
-                req->vm_token = strdup(token);
+                req->vm_token = psram_strdup(token);
                 strlcpy(req->vm_name, target->vm_name ? target->vm_name : "", req->name_cap);
-                req->ok = req->vm_token != NULL;
+                if (req->vm_token) {
+                    req->result = APP_HATCH_VM_OK;
+                    remember_hatch_vm(req->vm_id, target->vm_name, token, !by_id);
+                }
             }
             vm_list_free(vms, count);
         }
         operation_gate_give();
     }
-    xTaskNotifyGive(req->waiter);
-    stack_monitor_record(NULL);
-    vTaskDelete(NULL);
+    // Once done is set the waiter may return, and req is on its stack.
+    TaskHandle_t waiter = req->waiter;
+    atomic_store(&req->done, true);
+    xTaskNotifyGive(waiter);
 }
 
-bool app_hatch_vm_credentials(const char *want_vm, char *vm_id, size_t id_cap,
-                              char *vm_name, size_t name_cap, char **vm_token) {
+// Runs on the Hatch session's task, whose stack is in PSRAM: RAM only here.
+app_hatch_vm_t app_hatch_vm_credentials(const char *want_vm, bool fresh, char *vm_id,
+                                        size_t id_cap, char *vm_name, size_t name_cap,
+                                        char **vm_token) {
+    *vm_token = NULL;
+    if (!fresh && remembered_hatch_vm(want_vm, vm_id, id_cap, vm_name, name_cap, vm_token)) {
+        return APP_HATCH_VM_OK;
+    }
     hatch_vm_request_t req = {
-        .want_vm = want_vm, .vm_id = vm_id, .id_cap = id_cap,
-        .vm_name = vm_name, .name_cap = name_cap,
+        .want_vm = want_vm, .fresh = fresh, .vm_id = vm_id, .id_cap = id_cap,
+        .vm_name = vm_name, .name_cap = name_cap, .result = APP_HATCH_VM_BUSY,
         .waiter = xTaskGetCurrentTaskHandle(),
     };
-    if (xTaskCreate(hatch_vm_task, "impo_vm", 8192, &req, 4, NULL) != pdPASS) {
-        return false;
+    atomic_init(&req.done, false);
+    hatch_lock_take();
+    bool queued = s_hatch_vm_request == NULL;
+    if (queued) s_hatch_vm_request = &req;
+    hatch_lock_give();
+    if (!queued) return APP_HATCH_VM_BUSY;
+#if CONFIG_IMPO_ENABLED
+    xSemaphoreGive(s_impo_joined);   // cut the heartbeat's pause short
+#endif
+    while (!atomic_load(&req.done)) {
+        if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(HATCH_VM_PICKUP_MS))) continue;
+        // Not done yet. Not picked up either (the heartbeat is busy; at boot it
+        // hasn't started, Link's own VM connect runs first): take it back, and
+        // the session asks again shortly, by when Link has likely chosen a VM.
+        hatch_lock_take();
+        bool withdrawn = s_hatch_vm_request == &req;
+        if (withdrawn) s_hatch_vm_request = NULL;
+        hatch_lock_give();
+        if (withdrawn) return APP_HATCH_VM_BUSY;
     }
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     *vm_token = req.vm_token;
-    return req.ok;
+    return req.result;
 }
 #endif  // CONFIG_IMPO_ENABLED || CONFIG_HOMEHUB_VOICE
 
@@ -2689,6 +2810,9 @@ void app_run(void) {
     s_impo_joined = xSemaphoreCreateBinary();
 #endif
     s_auth_lock = xSemaphoreCreateMutex();
+#if CONFIG_IMPO_ENABLED || CONFIG_HOMEHUB_VOICE
+    s_hatch_vm_lock = xSemaphoreCreateMutex();
+#endif
     s_setup_window_lock = xSemaphoreCreateMutex();
     if (!s_operation_gate || xSemaphoreGive(s_operation_gate) != pdTRUE) {
         ESP_LOGE(TAG, "failed to initialize setup operation gate");
@@ -2979,6 +3103,9 @@ void app_run(void) {
         impo_keep_vm_session();
 #endif
         run_pending_vm_auth_refresh();
+#if CONFIG_IMPO_ENABLED || CONFIG_HOMEHUB_VOICE
+        run_pending_hatch_vm_lookup();
+#endif
 
         // Runs on every heartbeat tick, and does two things.
         //

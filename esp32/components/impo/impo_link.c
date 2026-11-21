@@ -65,10 +65,13 @@ bool impo_link_hatch_linked(void)
     return s_ops && s_ops->hatch_linked && s_ops->hatch_linked();
 }
 
-bool impo_link_hatch_vm(const char *want_vm, char *vm_id, size_t id_cap, char *vm_name, size_t name_cap,
-                        char **vm_token)
+impo_link_vm_t impo_link_hatch_vm(const char *want_vm, bool fresh, char *vm_id, size_t id_cap,
+                                  char *vm_name, size_t name_cap, char **vm_token)
 {
-    return s_ops && s_ops->hatch_vm && s_ops->hatch_vm(want_vm, vm_id, id_cap, vm_name, name_cap, vm_token);
+    if (!s_ops || !s_ops->hatch_vm) {
+        return IMPO_LINK_VM_FAILED;
+    }
+    return s_ops->hatch_vm(want_vm, fresh, vm_id, id_cap, vm_name, name_cap, vm_token);
 }
 
 bool impo_link_talk_press(void)

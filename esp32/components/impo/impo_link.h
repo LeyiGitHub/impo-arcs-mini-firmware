@@ -54,6 +54,14 @@ typedef enum {
 #define IMPO_LINK_REQ_TOO_LARGE (-2)
 typedef void (*impo_link_req_cb)(void *ctx, int status, const uint8_t *data, size_t len, bool end);
 
+/* What a VM credential lookup came to. BUSY: Link is busy (at boot, connecting)
+ * and didn't look; ask again shortly. */
+typedef enum {
+    IMPO_LINK_VM_OK,
+    IMPO_LINK_VM_BUSY,
+    IMPO_LINK_VM_FAILED,
+} impo_link_vm_t;
+
 typedef struct {
     void (*wifi_status)(impo_wifi_status_t *out);
     void (*wifi_apply)(void);                     /* on/off or credentials changed */
@@ -65,9 +73,10 @@ typedef struct {
     void (*ble_apply)(void);                      /* BLE phone setup setting changed */
     bool (*ble_started)(void);
     bool (*hatch_linked)(void);                   /* paired to a Hatch account */
-    /* Fills the VM whose id is want_vm (empty: Link's preferred VM). *vm_token is heap. */
-    bool (*hatch_vm)(const char *want_vm, char *vm_id, size_t id_cap, char *vm_name, size_t name_cap,
-                     char **vm_token);
+    /* Fills the VM whose id is want_vm (empty: Link's preferred VM). fresh: look
+     * it up again (the VM refused the last token). *vm_token is heap. */
+    impo_link_vm_t (*hatch_vm)(const char *want_vm, bool fresh, char *vm_id, size_t id_cap,
+                               char *vm_name, size_t name_cap, char **vm_token);
     bool (*talk_press)(void);                     /* true: Link used the press (pairing confirm) */
     void (*reset_setup)(void);                    /* forget Link setup and reboot */
     /* Requests to the VM on Link's own Noise session, for boards without PSRAM for their own. */
@@ -94,8 +103,8 @@ impo_link_state_t impo_link_state(void);
 const char *impo_link_state_name(impo_link_state_t state);
 
 bool impo_link_hatch_linked(void);
-bool impo_link_hatch_vm(const char *want_vm, char *vm_id, size_t id_cap, char *vm_name, size_t name_cap,
-                        char **vm_token);
+impo_link_vm_t impo_link_hatch_vm(const char *want_vm, bool fresh, char *vm_id, size_t id_cap,
+                                  char *vm_name, size_t name_cap, char **vm_token);
 bool impo_link_talk_press(void);
 void impo_link_reset_setup(void);
 

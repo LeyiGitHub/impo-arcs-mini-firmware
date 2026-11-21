@@ -63,8 +63,17 @@ void app_request_reconnect(void);
 #endif
 
 #if CONFIG_IMPO_ENABLED || CONFIG_HOMEHUB_VOICE
-// Looks up a VM credential from the paired account (want_vm: a VM id, or empty
-// for the preferred VM). *vm_token is heap; free() it.
-bool app_hatch_vm_credentials(const char *want_vm, char *vm_id, size_t id_cap,
-                              char *vm_name, size_t name_cap, char **vm_token);
+typedef enum {
+    APP_HATCH_VM_OK,
+    APP_HATCH_VM_BUSY,     // Link is busy (at boot, connecting): ask again shortly
+    APP_HATCH_VM_FAILED,
+} app_hatch_vm_t;
+
+// A VM credential from the paired account (want_vm: a VM id, or empty for the
+// preferred VM): the one Link connects with when it is that VM, else looked up.
+// fresh: look it up again, as after the VM refused the last one. RAM only on
+// the caller's task, so a PSRAM stack is fine. *vm_token is heap; free() it.
+app_hatch_vm_t app_hatch_vm_credentials(const char *want_vm, bool fresh, char *vm_id,
+                                        size_t id_cap, char *vm_name, size_t name_cap,
+                                        char **vm_token);
 #endif

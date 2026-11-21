@@ -108,7 +108,8 @@ static const char *TAG = "impo_chat_session";
 #define DEAD_US (60 * 1000000LL)           /* nothing from the server, pongs included */
 #define IDLE_CLOSE_US (10 * 60 * 1000000LL)
 #define AUTO_RETRY_MIN_US (5 * 1000000LL)  /* connecting without a turn, after a failure */
-#define AUTO_RETRY_MAX_US (120 * 1000000LL)
+#define AUTO_RETRY_MAX_US (30 * 1000000LL)  /* the screen says "Connecting" meanwhile */
+#define LINK_WAIT_US (2 * 1000000LL)       /* Link busy (at boot, connecting): not a failure */
 #define FINAL_TIMEOUT_US (15 * 1000000LL)  /* release -> final transcript */
 #define REPLY_TIMEOUT_US (60 * 1000000LL)  /* chat posted -> first assistant message */
 #define TURN_CAP_US (180 * 1000000LL)
@@ -170,6 +171,8 @@ static char s_host[IMPO_HOST_MAX + 1];
  * if that fails or the connection drops, not after an idle close. */
 static int64_t s_auto_next_us;
 static int64_t s_auto_backoff_us = AUTO_RETRY_MIN_US;
+/* The last connect didn't try: Link was busy and had no VM credential yet. */
+static bool s_link_busy;
 
 /* ---- Streams on the connection ---- */
 
@@ -767,8 +770,9 @@ static void forget_vm(void)
     s_vm_direct = false;
 }
 
-/* Fills s_vm from the account API (or the token itself). */
-static bool resolve_vm(char *err, size_t err_cap)
+/* Fills s_vm from the account API (or the token itself). fresh: Link looks
+ * its credential up again rather than hand over the one it has. */
+static bool resolve_vm(char *err, size_t err_cap, bool fresh)
 {
     if (s_vm.vm_token) {
         return true;
@@ -777,12 +781,18 @@ static bool resolve_vm(char *err, size_t err_cap)
     impo_settings_hatch_vm(want);
     if (!impo_settings_hatch_token_len()) {
         /* No token of our own: use Link's Hatch account. */
-        if (impo_link_hatch_vm(want, s_vm.vm_id, sizeof(s_vm.vm_id), s_vm.vm_name, sizeof(s_vm.vm_name),
-                               &s_vm.vm_token)) {
+        impo_link_vm_t got = impo_link_hatch_vm(want, fresh, s_vm.vm_id, sizeof(s_vm.vm_id), s_vm.vm_name,
+                                                sizeof(s_vm.vm_name), &s_vm.vm_token);
+        if (got == IMPO_LINK_VM_OK) {
             ESP_LOGI(TAG, "VM %s (%s) via Link", s_vm.vm_id, s_vm.vm_name);
             return true;
         }
-        strlcpy(err, impo_link_hatch_linked() ? "Can't reach Impo's server" : "Not paired", err_cap);
+        if (got == IMPO_LINK_VM_BUSY) {
+            s_link_busy = true;
+            strlcpy(err, "Waiting for Link", err_cap);
+        } else {
+            strlcpy(err, impo_link_hatch_linked() ? "Can't reach Impo's server" : "Not paired", err_cap);
+        }
         return false;
     }
     char *token = static_cast<char *>(malloc(IMPO_TOKEN_MAX + 1));
@@ -896,8 +906,10 @@ static bool ensure_connected(void)
         strlcpy(s_host, "gadgets.impo.ai", sizeof(s_host));
     }
     char err[48] = "";
+    s_link_busy = false;
     for (int attempt = 0; attempt < 2; attempt++) {
-        if (!resolve_vm(err, sizeof(err))) {
+        /* The second attempt follows a refused token: a fresh one, not Link's copy. */
+        if (!resolve_vm(err, sizeof(err), attempt > 0)) {
             break;
         }
         int status;
@@ -914,6 +926,11 @@ static bool ensure_connected(void)
             continue;
         }
         break;
+    }
+    if (s_link_busy) {
+        ESP_LOGI(TAG, "waiting for Link before connecting");
+        impo_hatch_report(IMPO_HATCH_TESTING, "Waiting for Link...");
+        return false;
     }
     ESP_LOGW(TAG, "connect failed: %s", err);
     impo_hatch_report(IMPO_HATCH_UNREACHABLE, err);
@@ -1019,7 +1036,9 @@ static bool turn_start(uint32_t gen, bool text)
     s_turn.start_us = now_us();
     resampler_init(&s_turn.up, MIC_RATE, DICT_RATE);
     if (!ensure_connected()) {
-        turn_fail(impo_hatch_configured() ? "CAN'T REACH IMPO" : "IMPO NOT SET UP");
+        turn_fail(!impo_hatch_configured() ? "IMPO NOT SET UP"
+                  : s_link_busy            ? "STILL CONNECTING"
+                                           : "CAN'T REACH IMPO");
         return false;
     }
     return true;
@@ -2187,6 +2206,9 @@ static void hatch_task(void *arg)
                 if (ensure_connected()) {
                     s_auto_next_us = INT64_MAX;   /* until it drops */
                     s_auto_backoff_us = AUTO_RETRY_MIN_US;
+                } else if (s_link_busy) {
+                    /* Nothing was tried, so nothing to back off from. */
+                    s_auto_next_us = now_us() + LINK_WAIT_US;
                 } else {
                     s_auto_next_us = now_us() + s_auto_backoff_us;
                     s_auto_backoff_us = s_auto_backoff_us * 2 < AUTO_RETRY_MAX_US ? s_auto_backoff_us * 2
