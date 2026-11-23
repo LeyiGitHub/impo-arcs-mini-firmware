@@ -14,7 +14,8 @@
 | 原设备其他分区保持 | 通过；重启前独立整片读取，CP 分区外逐字节相同 |
 | 新固件启动、USB、保存 Wi-Fi、device.health | 通过，health overall=ok；BLE 广播已启用 |
 | 官方 BLE 配网、设备凭据保存 | 通过；实机读取 paired=1，access / refresh 均非空 |
-| 设备直连 Impo | 已观测 TLS、WebSocket、Noise 握手及 link.register，state=online；随后也出现写超时和重连，稳定性未通过 |
+| 设备直连 Impo 会话 | 已观测 TLS、WebSocket、Noise 握手，客户端发出 link.register 后显示 state=online；随后也出现写超时和重连，稳定性未通过 |
+| 服务器注册确认与手机设备状态 | 尚未验收；未捕获 link.register ack，手机仍显示等待设备上线。SDK 的 state=online 在注册确认前就会设置，不能作为手机上线成功的证据 |
 | 原生语音自测 | 未通过；发起 /tts 和 /chat/stream 后，上传失败，TLS 写入 15 秒超时，后续链路重连 |
 | 麦克风收音与扬声器 | 已观测 16 kHz 录音启动、非零录音水平和提示音播放软件回执；实际听感及语音往返未验收 |
 | 屏幕 | 尚未适配，当前黑屏，不用屏幕判断设备是否在线 |
