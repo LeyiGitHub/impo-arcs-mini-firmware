@@ -1,0 +1,24 @@
+name: ARCS Mini host checks
+
+on:
+  pull_request:
+    paths:
+      - 'arcs/**'
+      - '.github/workflows/arcs-mini.yml'
+  push:
+    branches: [main, codex/arcs-mini-device]
+    paths:
+      - 'arcs/**'
+      - '.github/workflows/arcs-mini.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  board:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: sh arcs/tests/host/run_arcs_mini.sh
