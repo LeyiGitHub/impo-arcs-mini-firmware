@@ -2,7 +2,7 @@
 
 基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的云宝语音盒子固件工程。设备自己连接 `gadgets.impo.ai`，使用官方 BLE 配对、Noise 链路、设备命令和语音回合；不依赖原来的 Mac / ACK / LifeLike 桥接服务。
 
-这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 的固定提交获取到 `upstream/`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录官方 ARCS 语音播放的缓冲修正；共享链路与语音代码不另写一份。
+这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 的固定提交获取到 `upstream/`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲与 TLS 读取调度的社区修正；共享链路与语音代码不另写一份。
 
 ## 当前状态
 
@@ -36,10 +36,11 @@ macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker
 
 ```sh
 sh tests/run.sh
+ARCS_BASE=/path/to/arcs-sdk-0.1.6 sh tests/run_tls.sh
 ARCS_BASE=/path/to/arcs-sdk-0.1.6 sh upstream/arcs/tests/host/run.sh
 ```
 
-第一项获取固定 SDK、应用补丁，检查按键策略和音频队列的缓冲行为；第二项运行官方 SDK 的配对、音频、语音、策略与链路纯逻辑测试。
+第一项获取固定 SDK、应用补丁，检查按键策略和音频队列的缓冲行为；第二项检查真实平台 TLS 读取函数的非阻塞与超时行为；第三项运行官方 SDK 的配对、音频、语音、策略与链路纯逻辑测试。设置了 `ARCS_BASE` 时，第一项也会运行 TLS 读取测试。
 
 ## 许可证
 

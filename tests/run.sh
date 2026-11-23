@@ -12,3 +12,6 @@ gadget=upstream/arcs/gadget
   tests/test_sound_buffer.c "$gadget/gadget_sound.c" "$gadget/gadget_pcm.c" -lm -o "$output/sound"
 "$output/sound"
 python3 -m py_compile tools/prepare_sdk.py tools/build.py tools/gen_manifest.py
+if [ -n "${ARCS_BASE:-}" ]; then
+    sh tests/run_tls.sh
+fi
