@@ -15,7 +15,8 @@ gadget=upstream/arcs/gadget
 "${CC:-cc}" -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -Werror -Itests/audio_stubs -I"$gadget" \
   tests/test_sound_buffer.c "$gadget/gadget_sound.c" "$gadget/gadget_pcm.c" -lm -o "$output/sound"
 "$output/sound"
-python3 -m py_compile tools/prepare_sdk.py tools/build.py tools/gen_manifest.py tools/gen_screen_font.py
+sh tests/run_wifi.sh
+python3 -m py_compile tools/prepare_sdk.py tools/build.py tools/check_image.py tools/gen_manifest.py tools/gen_screen_font.py
 if [ -n "${ARCS_BASE:-}" ]; then
     sh tests/run_tls.sh
     sh tests/run_voice.sh

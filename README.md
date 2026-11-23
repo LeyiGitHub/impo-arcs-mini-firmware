@@ -2,7 +2,7 @@
 
 基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的云宝语音盒子固件工程。设备自己连接 `gadgets.impo.ai`，使用官方 BLE 配对、Noise 链路、设备命令和语音回合；不依赖原来的 Mac / ACK / LifeLike 桥接服务。
 
-这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 的固定提交获取到 `upstream/`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传及连续对话的社区修正；共享链路与语音代码不另写一份。
+这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 的固定提交获取到 `upstream/`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话及选网优先级的社区修正；共享链路与语音代码不另写一份。
 
 ## 当前状态
 
@@ -29,6 +29,8 @@ macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker
 ## 配对与使用
 
 先核实板型、备份完整闪存，按 [刷写和恢复说明](docs/FLASHING.md) 只更新 CP 应用。接着在 Impo 的设备设置打开开发者模式，通过 BLE 添加 `ImpoGadget-XXXXXX`。SSID、密码和设备凭据通过官方配对保存到设备；公开固件不内置凭据。配对后可说“你好云宝”或短按 PB04 电源键启动对话；提示音后说话，停顿后由 Impo 处理并通过盒子扬声器回复。回答结束、再次提示收音后可继续说下一句，静音约 5 秒或短按退出。已通过真实问答与完整听测，包括屏幕版在手机热点上的一次问答；原网络仍出现 TLS 写超时、语音下载停顿和重连问题，尚不能作为稳定可用固件。
+
+成功配网或通过原生 `wifi connect` 手动连接后，会保存该网络的优先选择；重启先尝试它，失败时再回退到 SDK 已保存网络的自动选择。密码仍由官方 Wi-Fi 管理器保存，不内置于源码。
 
 屏幕“待机”跟随 SDK 客户端在线状态。通过单个 ADB 交互 shell 读取 `pair`、`link`、`gadget device.health`：`paired=1` 表示已保存配对，`state=online` 表示已建立 Impo 链路；注册成功还应检查 `link.register acked`，语音需单独听测。`screen` 可查看显示写帧状态，`screen test` 可测试颜色；驱动回执不能代替实物验收。不要把这些命令的原始输出发布到公开仓库。
 

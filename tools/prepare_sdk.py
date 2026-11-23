@@ -35,12 +35,20 @@ def prepare(sdk):
             target = dest / file.relative_to(source)
             if target.exists() and target.read_bytes() != file.read_bytes():
                 raise SystemExit("Board destination has local changes: " + str(target))
-    shutil.copytree(source, dest, dirs_exist_ok=True)
+    # Do not touch identical CMake/config inputs: that needlessly regenerates
+    # autoconf and rebuilds the complete SDK on every test/build invocation.
+    for file in source.rglob("*"):
+        if file.is_file():
+            target = dest / file.relative_to(source)
+            if not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(file, target)
     conf = sdk / "arcs/app/yunbao.conf"
     data = (ROOT / "configs/yunbao.conf").read_bytes()
     if conf.exists() and conf.read_bytes() != data:
         raise SystemExit("Public build config has local changes: " + str(conf))
-    conf.write_bytes(data)
+    if not conf.exists():
+        conf.write_bytes(data)
     return sdk
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--sdk", type=Path, default=ROOT / "upstream")

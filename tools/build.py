@@ -3,6 +3,7 @@
 import argparse, json, os, subprocess
 from pathlib import Path
 from prepare_sdk import ROOT, prepare
+from check_image import check
 ap = argparse.ArgumentParser()
 ap.add_argument("--docker", action="store_true")
 ap.add_argument("--sdk", type=Path, default=ROOT / "upstream")
@@ -21,4 +22,5 @@ if a.docker:
     subprocess.run(args, check=True)
 else:
     subprocess.run(args, cwd=sdk / "arcs", check=True)
+check(sdk / "arcs/build-yunbao")
 print("Firmware:", sdk / "arcs/build-yunbao/impo-gadget.bin")
