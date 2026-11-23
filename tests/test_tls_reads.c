@@ -8,6 +8,8 @@ static unsigned calls, delays;
 static uint64_t now_ms;
 static int outcomes[8];
 static size_t outcomes_n;
+static unsigned socket_option_calls;
+static int socket_option_result;
 static int fake_ssl_read(mbedtls_ssl_context *ssl, unsigned char *buf, size_t len)
 {
     (void)ssl; (void)buf; (void)len;
@@ -27,6 +29,13 @@ bool plat_time_synced(void) { return true; }
 void vTaskDelay(unsigned ms) { now_ms += ms; delays += ms; }
 void test_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
 int closesocket(int fd) { (void)fd; return 0; }
+int sal_setsockopt(int fd, int level, int option, const void *value, socklen_t size)
+{
+    assert(fd == 123 && level == IPPROTO_TCP && option == TCP_NODELAY);
+    assert(size == sizeof(int) && *(const int *)value == 1);
+    socket_option_calls++;
+    return socket_option_result;
+}
 int mbedtls_hardware_poll(void *d, unsigned char *o, size_t n, size_t *got)
 { (void)d; memset(o, 0, n); *got = n; return 0; }
 int mbedtls_net_connect(mbedtls_net_context *c, const char *h, const char *p, int proto)
@@ -44,6 +53,12 @@ static void sequence(int a, int b, size_t n)
 int main(void)
 {
     plat_tls_t t = {0}; unsigned char buf[64];
+    t.net.fd = 123;
+    tune_tcp(&t.net);
+    assert(socket_option_calls == 1);
+    socket_option_result = -1;
+    tune_tcp(&t.net); /* An unavailable optimization does not close the connection. */
+    assert(socket_option_calls == 2);
     sequence(MBEDTLS_ERR_SSL_WANT_READ, 0, 1);
     assert(plat_tls_read(&t, buf, sizeof(buf), 0) == PLAT_TLS_TIMEOUT);
     assert(calls == 1 && delays == 0);

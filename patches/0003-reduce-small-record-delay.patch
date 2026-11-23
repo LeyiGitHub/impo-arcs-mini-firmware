@@ -1,0 +1,79 @@
+diff --git a/arcs/link/impo_link_streams.c b/arcs/link/impo_link_streams.c
+index 19e62f9..b4c6d6b 100644
+--- a/arcs/link/impo_link_streams.c
++++ b/arcs/link/impo_link_streams.c
+@@ -100,14 +100,22 @@ static void on_frame(void *ctx, int status, const uint8_t *data, size_t len, boo
+ 
+ static bool send_body(int64_t id, const uint8_t *data, size_t len, bool end)
+ {
++    size_t total = len;
++    uint64_t started = plat_uptime_ms();
+     do {
+         size_t n = len > CHUNK_MAX ? CHUNK_MAX : len;
+         if (!noise_ctrl_req_send(id, data, n, end && n == len, SEND_WAIT_MS)) {
++            LISA_LOGW(TAG, "body queue failed: %u/%u bytes accepted in %u ms", (unsigned)(total - len),
++                      (unsigned)total, (unsigned)(plat_uptime_ms() - started));
+             return false;
+         }
+         data += n;
+         len -= n;
+     } while (len > 0);
++    uint64_t elapsed = plat_uptime_ms() - started;
++    if (elapsed >= 500) {
++        LISA_LOGI(TAG, "body queued: %u bytes in %u ms", (unsigned)total, (unsigned)elapsed);
++    }
+     return true;
+ }
+ 
+diff --git a/arcs/platform/arcs/plat_tls.c b/arcs/platform/arcs/plat_tls.c
+index 64b7fbc..b541340 100644
+--- a/arcs/platform/arcs/plat_tls.c
++++ b/arcs/platform/arcs/plat_tls.c
+@@ -7,6 +7,9 @@
+ #include <string.h>
+ #include <stdlib.h>
+ 
++#include "lwip/sockets.h"
++#include "sal_socket.h"
++
+ #include "mbedtls/ctr_drbg.h"
+ #include "mbedtls/entropy.h"
+ #include "mbedtls/error.h"
+@@ -89,6 +92,18 @@ static int load_ca(void)
+     return ret;
+ }
+ 
++/* A WS header and its masked payload are separate TLS records. Do not make
++ * small records wait for Nagle plus a remote delayed ACK on a high-RTT path. */
++static void tune_tcp(mbedtls_net_context *net)
++{
++    int enabled = 1;
++    if (sal_setsockopt(net->fd, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled)) != 0) {
++        LISA_LOGW(TAG, "TCP_NODELAY unavailable (errno %d)", errno);
++    } else {
++        LISA_LOGI(TAG, "TCP_NODELAY enabled");
++    }
++}
++
+ static void log_error(const char *what, int ret)
+ {
+     char msg[96];
+@@ -142,6 +157,7 @@ plat_tls_t *plat_tls_connect(const char *host, uint16_t port, uint32_t timeout_m
+         log_error("tcp connect", ret);
+         goto fail;
+     }
++    tune_tcp(&t->net);
+     if ((ret = mbedtls_net_set_nonblock(&t->net)) != 0) {
+         LISA_LOGE(TAG, "set nonblock: %d", ret);
+         goto fail;
+@@ -218,6 +234,10 @@ int plat_tls_write(plat_tls_t *t, const void *buf, size_t len)
+         p += ret;
+         left -= (size_t)ret;
+     }
++    uint64_t elapsed = plat_uptime_ms() - start;
++    if (elapsed >= 250) {
++        LISA_LOGW(TAG, "slow write: %u bytes in %u ms", (unsigned)len, (unsigned)elapsed);
++    }
+     return (int)len;
+ }
+ 
