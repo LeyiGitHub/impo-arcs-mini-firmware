@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+output=$(mktemp -d)
+trap 'rm -rf "$output"' EXIT
+board=firmware/boards/arcs_mini_yunbao/gadget
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$board" tests/test_yunbao_button.c "$board/yunbao_button.c" -o "$output/button"
+"$output/button"
+python3 -m py_compile tools/prepare_sdk.py tools/build.py tools/gen_manifest.py

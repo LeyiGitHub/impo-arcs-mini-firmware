@@ -1,0 +1,3 @@
+listenai_library_named(board_yunbao)
+listenai_library_sources(board_yunbao.c yunbao_button.c)
+listenai_include_directories(${CMAKE_CURRENT_SOURCE_DIR})

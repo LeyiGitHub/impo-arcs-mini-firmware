@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.DS_Store
+build*/
+output/
+backups/
+private/
+*.private.*
+local.conf
+.env
+.env.*
+/upstream

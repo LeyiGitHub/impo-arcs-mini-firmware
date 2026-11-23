@@ -1,0 +1,13 @@
+{
+  "impo_gadget_sdk": {
+    "repository": "https://github.com/impoai/impo-gadget-sdk",
+    "commit": "26ad21ff936527f40114b768aa756ac70f4ca6c9"
+  },
+  "arcs_sdk": {
+    "version": "0.1.6",
+    "bundled": false,
+    "note": "Provide ARCS_BASE from your licensed ListenAI SDK installation.",
+    "source_tree": "6781fe0734c8f3e5807b653e46bf528d0f593660"
+  },
+  "builder_image": "ghcr.io/listenai/arcs-builder@sha256:90b0f14ce44790505601c452fe9146e043e308f91ad2ce692a46a9cf1111981a"
+}
