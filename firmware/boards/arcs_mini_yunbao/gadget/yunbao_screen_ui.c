@@ -59,7 +59,7 @@ static void text(uint16_t *p, const char *str, int y, uint16_t color)
 }
 
 bool yunbao_screen_render(uint16_t *p, unsigned width, unsigned height,
-                          gadget_status_t state, uint32_t ms, bool test)
+                          gadget_status_t state, uint32_t ms, bool test, bool wake_available, bool dialogue_active)
 {
     if (!p || width != YUNBAO_SCREEN_WIDTH || height != YUNBAO_SCREEN_HEIGHT) return false;
     for (unsigned i = 0; i < width*height; i++) p[i] = BG;
@@ -104,6 +104,6 @@ bool yunbao_screen_render(uint16_t *p, unsigned width, unsigned height,
     }
     text(p, labels[st], 169, WHITE);
     rect(p, 48, 202, 144, 1, RGB(32,52,66));
-    text(p, "短按说话", 210, MUTED);
+    text(p, dialogue_active ? "短按结束" : wake_available ? "你好云宝" : "短按说话", 210, MUTED);
     return true;
 }

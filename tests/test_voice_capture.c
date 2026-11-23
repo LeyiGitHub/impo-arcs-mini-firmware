@@ -13,6 +13,9 @@ static uint64_t clock_ms;
 static unsigned frame_n, send_n, opened, cancelled, final_n, per_send_ms;
 static unsigned fail_send;
 static bool mic_running, speech = true, missing_frames;
+static bool answer, reply_given, say_fails;
+static uint64_t playing_until;
+static unsigned interrupt_frame;
 static uint8_t raw_note[500000];
 static size_t raw_n;
 
@@ -28,7 +31,9 @@ QueueHandle_t xQueueCreate(unsigned n, unsigned size) { (void)n; (void)size; ret
 int xQueueSend(QueueHandle_t q, const void *p, unsigned ms)
 { (void)q; (void)p; (void)ms; return pdTRUE; }
 int xQueueReceive(QueueHandle_t q, void *p, unsigned ms)
-{ (void)q; (void)p; (void)ms; return pdFALSE; }
+{ (void)q; (void)ms;
+  if (answer && final_n && !reply_given) { *(char **)p = strdup("five"); reply_given=true; return pdTRUE; }
+  return pdFALSE; }
 unsigned uxQueueMessagesWaiting(QueueHandle_t q) { (void)q; return 0; }
 StreamBufferHandle_t xStreamBufferCreate(size_t n, size_t trigger)
 { (void)n; (void)trigger; return (void *)1; }
@@ -43,6 +48,7 @@ size_t xStreamBufferReceive(StreamBufferHandle_t q, void *p, size_t n, unsigned 
     int16_t *samples = p;
     for (unsigned i = 0; i < FRAME; i++) samples[i] = sample_at(frame_n);
     frame_n++; clock_ms += FRAME_MS;
+    if (interrupt_frame && frame_n == interrupt_frame) gadget_voice_trigger();
     return n;
 }
 int plat_audio_mic_start(plat_audio_mic_cb_t cb)
@@ -51,9 +57,9 @@ void plat_audio_mic_stop(void) { assert(mic_running); mic_running = false; }
 int gadget_sound_beep(void) { return 0; }
 int gadget_sound_beep_down(void) { return 0; }
 void gadget_sound_stop(void) {}
-gadget_sound_state_t gadget_sound_state(void) { return GADGET_SOUND_IDLE; }
+gadget_sound_state_t gadget_sound_state(void) { return clock_ms < playing_until ? GADGET_SOUND_PLAYING : GADGET_SOUND_IDLE; }
 const char *gadget_sound_error(void) { return ""; }
-int gadget_speech_say(const char *text) { (void)text; return -1; }
+int gadget_speech_say(const char *text) { (void)text; if (say_fails) return -1; playing_until=clock_ms+200; return 0; }
 impo_link_state_t impo_link_state(void) { return IMPO_LINK_ONLINE; }
 int impo_link_stream_open(const char *path, const char *type, const char *accept,
                           const void *body, size_t n, bool more, const impo_link_stream_sink_t *sink)
@@ -89,6 +95,8 @@ static void reset(void)
     raw_n = 0; per_send_ms = 6000; fail_send = 0;
     speech = true; missing_frames = false; s_touch = false; s_note = -1;
     s_note_failed = false; s_state = GADGET_VOICE_IDLE;
+    s_continuous=s_session=s_stop=s_wake=s_followup=false;
+    answer=reply_given=say_fails=false; playing_until=0; interrupt_frame=0;
 }
 static uint32_t u32(const uint8_t *p)
 { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
@@ -111,5 +119,27 @@ int main(void)
     assert(!listen(NULL) && cancelled == 1 && send_n == 4 && final_n == 0);
     reset(); missing_frames = true;
     assert(!listen(NULL) && opened == 0 && !mic_running);
+    /* Execute the actual task turn handler: one click, two completed replies,
+     * then five seconds of silence releases the continuous session. */
+    reset(); per_send_ms=0; answer=true;
+    gadget_voice_set_continuous(true); gadget_voice_trigger();
+    run_requested_turn();
+    assert(s_session && s_followup && !s_touch && reply_given);
+    frame_n=send_n=opened=final_n=0; raw_n=0; reply_given=false;
+    run_requested_turn();
+    assert(s_session && s_followup && reply_given);
+    frame_n=send_n=opened=final_n=0; raw_n=0; speech=false; reply_given=false;
+    run_requested_turn();
+    assert(!s_session && !s_followup && !mic_running && opened==0 && frame_n==250);
+    /* A click while speaking/recording exits without uploading partial speech. */
+    reset(); per_send_ms=0; answer=true; interrupt_frame=40;
+    gadget_voice_set_continuous(true); gadget_voice_wake(); run_requested_turn();
+    assert(!s_session && !s_followup && !s_touch && !mic_running && opened==0);
+    reset(); per_send_ms=0; answer=true; say_fails=true;
+    gadget_voice_set_continuous(true); gadget_voice_trigger(); run_requested_turn();
+    assert(!s_session && !s_followup);
+    reset(); per_send_ms=0; answer=true; gadget_voice_trigger(); run_requested_turn();
+    assert(!s_session && !s_followup && reply_given); /* other boards remain one shot */
+    puts("Continuous voice: two turns, silent exit, click cancellation, TTS failure and opt-in passed");
     puts("Voice capture: full PCM before upload, exact WAV sizes, slow upload, silence, failure and deadline passed");
 }

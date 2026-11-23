@@ -1,0 +1,333 @@
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -57,6 +57,8 @@
+ static QueueHandle_t s_replies;              /* char *, from the link task */
+ static volatile gadget_voice_state_t s_state = GADGET_VOICE_IDLE;
+ static volatile bool s_touch;
++static volatile bool s_continuous, s_session, s_stop, s_wake, s_wakeup_available;
++static bool s_followup;
+ static volatile uint32_t s_mic_dropped;
+ static volatile uint32_t s_turns, s_replies_spoken;
+ static char *volatile s_test_text;           /* loopback test: speak this into our own mic */
+@@ -270,7 +272,7 @@
+     const char *why = NULL;
+     while (vr == GADGET_VAD_LISTENING) {
+         have += xStreamBufferReceive(s_mic, (uint8_t *)frame + have, sizeof(frame) - have, pdMS_TO_TICKS(200));
+-        if (s_touch) {
++        if (s_touch || s_stop) {
+             why = "touched";
+             break;
+         }
+@@ -298,7 +300,7 @@
+     LISA_LOGI(TAG, "listened %u ms in %u ms (floor %u, threshold %u), ended by %s; mic dropped %u bytes",
+               (unsigned)vad.t_ms, (unsigned)((uint32_t)plat_uptime_ms() - wall0), (unsigned)vad.floor_min,
+               (unsigned)vad.threshold, why, (unsigned)s_mic_dropped);
+-    if (!vad.heard || s_mic_dropped != 0 || strcmp(why, "mic timeout") == 0) {
++    if (s_stop || !vad.heard || s_mic_dropped != 0 || strcmp(why, "mic timeout") == 0) {
+         end_turn(test_text != NULL);
+         gadget_sound_beep_down();
+         return false;
+@@ -350,17 +352,17 @@
+ }
+ 
+ /* Speaks replies in order until a quiet spell; a touch ends it early. */
+-static void await_replies(void)
++static bool await_replies(void)
+ {
+     s_state = GADGET_VOICE_THINKING;
+     uint32_t waited = 0, quiet = 0;
+-    bool spoke = false;
++    bool spoke = false, completed = false;
+     char *current = NULL;      /* the reply being spoken, kept for one retry */
+     bool retried = false;
+     for (;;) {
+         if (s_touch) {
+             free(current);
+-            return;   /* the task loop starts a new turn */
++            return false;   /* caller handles cancellation */
+         }
+         gadget_sound_state_t st = gadget_sound_state();
+         bool busy = st == GADGET_SOUND_FETCHING || st == GADGET_SOUND_PLAYING;
+@@ -375,7 +377,11 @@
+         if (!busy && (st != GADGET_SOUND_FAILED || retried || current == NULL) &&
+             xQueueReceive(s_replies, &text, 0) == pdTRUE) {
+             LISA_LOGI(TAG, "reply: %.120s", text);
+-            gadget_speech_say(text);
++            if (gadget_speech_say(text) != 0) {
++                free(text); free(current);
++                s_state = GADGET_VOICE_IDLE;
++                return false;
++            }
+             free(current);
+             current = text;
+             retried = false;
+@@ -388,6 +394,7 @@
+         waited += 100;
+         quiet = busy ? 0 : quiet + 100;
+         if (spoke && quiet >= TURN_QUIET_MS && uxQueueMessagesWaiting(s_replies) == 0) {
++            completed = st != GADGET_SOUND_FAILED && impo_link_state() == IMPO_LINK_ONLINE;
+             break;
+         }
+         if (!spoke && s_note_failed) {
+@@ -406,6 +413,29 @@
+     }
+     free(current);
+     s_state = GADGET_VOICE_IDLE;
++    return completed;
++}
++
++static void run_requested_turn(void)
++{
++    char *test = s_test_text;
++    s_test_text = NULL;
++    s_touch = s_wake = false;
++    bool followup = s_followup;
++    s_followup = false;
++    s_session = test == NULL && s_continuous;
++    end_turn(true);
++    if (followup) vTaskDelay(pdMS_TO_TICKS(300)); /* speaker tail */
++    bool complete = !s_stop && listen(test) && await_replies();
++    s_followup = test == NULL && s_session && complete && !s_stop;
++    if (!s_followup) {
++        end_turn(true);
++        s_session = false;
++        /* A click while in a continuous session exits, never starts another turn. */
++        if (s_stop) s_touch = false;
++        s_stop = false;
++    }
++    free(test);
+ }
+ 
+ static void voice_task(void *arg)
+@@ -419,15 +449,12 @@
+                                                2, false, &s_sub_sink) >= 0;
+             sub_retry_ms = 5000;
+         }
+-        if (s_touch || s_test_text != NULL) {
+-            char *test = s_test_text;
+-            s_test_text = NULL;
+-            s_touch = false;
++        if (s_stop) {
+             end_turn(true);
+-            if (listen(test)) {
+-                await_replies();
+-            }
+-            free(test);
++            s_session = s_followup = s_wake = s_touch = s_stop = false;
++        }
++        if (s_touch || s_wake || s_followup || s_test_text != NULL) {
++            run_requested_turn();
+             continue;
+         }
+         /* Plain sleep: the mic stream buffer uses this task's notification. */
+@@ -440,12 +467,21 @@
+ 
+ void gadget_voice_trigger(void)
+ {
++    if (s_session) s_stop = true;
+     s_touch = true;
+ }
++void gadget_voice_set_continuous(bool enabled) { s_continuous = enabled; }
++bool gadget_voice_continuous_active(void) { return s_session; }
++void gadget_voice_set_wakeup_available(bool available) { s_wakeup_available = available; }
++bool gadget_voice_wakeup_available(void) { return s_wakeup_available; }
++void gadget_voice_wake(void)
++{
++    if (s_state == GADGET_VOICE_IDLE && !s_session && !s_test_text) s_wake = true;
++}
+ 
+ int gadget_voice_test(const char *text)
+ {
+-    if (s_state != GADGET_VOICE_IDLE || s_test_text != NULL) {
++    if (s_state != GADGET_VOICE_IDLE || s_session || s_test_text != NULL) {
+         return -1;
+     }
+     char *copy = strdup(text);
+--- a/arcs/gadget/gadget_voice.h
++++ b/arcs/gadget/gadget_voice.h
+@@ -2,6 +2,7 @@
+ #pragma once
+ 
+ #include <stdint.h>
++#include <stdbool.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -17,6 +18,12 @@
+ int gadget_voice_start(void);
+ /* Idle: start listening. Listening: stop now. Replying: interrupt and listen again. Any task. */
+ void gadget_voice_trigger(void);
++/* Board opt-in. A successful answer starts another turn; silence or a click exits. */
++void gadget_voice_set_continuous(bool enabled);
++bool gadget_voice_continuous_active(void);
++void gadget_voice_wake(void);
++void gadget_voice_set_wakeup_available(bool available);
++bool gadget_voice_wakeup_available(void);
+ gadget_voice_state_t gadget_voice_state(void);
+ 
+ /* Self-test: one turn in which the gadget speaks `text` (via /tts) into its own microphone. */
+--- a/arcs/platform/arcs/esp_compat/include/sdkconfig.h
++++ b/arcs/platform/arcs/esp_compat/include/sdkconfig.h
+@@ -15,6 +15,9 @@
+ /* An Impo build: request streams (noise_ctrl_req_*), impo_commands_describe/
+  * capabilities and impo_state_power(), bridged to gadget/ in link/impo_glue_commands.c. */
+ #define CONFIG_IMPO_ENABLED 1
++#include <stdbool.h>
++bool gadget_voice_wakeup_available(void);
++#define NOISE_CTRL_WAKEUP_SUPPORTED gadget_voice_wakeup_available()
+ 
+ /*
+  * CONFIG_SPIRAM stays unset although every ARCS board has PSRAM. It selects
+--- a/arcs/platform/arcs/plat_audio.c
++++ b/arcs/platform/arcs/plat_audio.c
+@@ -5,6 +5,8 @@
+  * Settings from mtt1.0-impo V2.1 (app_wakeup.c start_playback, prj.conf gains).
+  */
+ #include <errno.h>
++#include "FreeRTOS.h"
++#include "semphr.h"
+ 
+ #include "lisa_audio.h"
+ #include "lisa_device.h"
+@@ -22,6 +24,7 @@
+ #define MIC_DIGITAL_DB   0
+ 
+ static lisa_device_t *s_dev;
++static SemaphoreHandle_t s_mic_lock;
+ 
+ int plat_audio_start(void)
+ {
+@@ -51,17 +54,20 @@
+         LISA_LOGE(TAG, "play start failed: %d", r);
+         return r;
+     }
++    s_mic_lock = xSemaphoreCreateMutex();
++    if (!s_mic_lock) return -ENOMEM;
+     s_dev = dev;
+     LISA_LOGI(TAG, "speaker stream up: 16 kHz mono");
+     return 0;
+ }
+ 
+-static plat_audio_mic_cb_t s_mic_cb;
++static plat_audio_mic_cb_t volatile s_mic_cb, s_wake_cb;
++static bool s_recording, s_record_stereo;
+ 
+ static void on_audio(const lisa_audio_event_t *ev, void *user)
+ {
+     (void)user;
+-    plat_audio_mic_cb_t cb = s_mic_cb;
++    plat_audio_mic_cb_t cb = s_mic_cb ? s_mic_cb : s_wake_cb;
+     if (cb != NULL && ev->record_buffer != NULL && ev->record_samples > 0) {
+         cb((const int16_t *)ev->record_buffer, ev->record_samples);
+     }
+@@ -74,7 +80,7 @@
+     s_mic_stereo = on;
+ }
+ 
+-int plat_audio_mic_start(plat_audio_mic_cb_t cb)
++static int record_start(void)
+ {
+     if (s_dev == NULL) {
+         return -ENODEV;
+@@ -96,25 +102,61 @@
+         }
+         registered = true;
+     }
+-    s_mic_cb = cb;
+     int r = lisa_audio_record_config(s_dev, &cfg);
+     if (r == LISA_DEVICE_OK) {
+         r = lisa_audio_record_start(s_dev);
+     }
+     if (r != LISA_DEVICE_OK) {
+-        s_mic_cb = NULL;
+         LISA_LOGE(TAG, "mic start failed: %d", r);
+         return -EIO;
+     }
++    s_recording = true;
++    s_record_stereo = s_mic_stereo;
+     return 0;
+ }
+ 
++int plat_audio_mic_start(plat_audio_mic_cb_t cb)
++{
++    if (!s_dev || !s_mic_lock || !cb) return -ENODEV;
++    xSemaphoreTake(s_mic_lock, portMAX_DELAY);
++    int r = s_mic_cb || (s_recording && s_record_stereo != s_mic_stereo) ? -EBUSY : 0;
++    if (!r && !s_recording) r = record_start();
++    if (!r) s_mic_cb = cb;
++    xSemaphoreGive(s_mic_lock);
++    return r;
++}
++static void stop_unused(void)
++{
++    if (s_recording && !s_mic_cb && !s_wake_cb) {
++        lisa_audio_record_stop(s_dev);
++        s_recording = false;
++    }
++}
+ void plat_audio_mic_stop(void)
+ {
+-    if (s_dev != NULL) {
+-        lisa_audio_record_stop(s_dev);
+-    }
++    if (!s_mic_lock) return;
++    xSemaphoreTake(s_mic_lock, portMAX_DELAY);
+     s_mic_cb = NULL;
++    stop_unused();
++    xSemaphoreGive(s_mic_lock);
++}
++int plat_audio_wake_start(plat_audio_mic_cb_t cb)
++{
++    if (!s_dev || !s_mic_lock || !cb) return -ENODEV;
++    xSemaphoreTake(s_mic_lock, portMAX_DELAY);
++    int r = s_wake_cb || s_mic_stereo || (s_recording && s_record_stereo) ? -EBUSY : 0;
++    if (!r && !s_recording) r = record_start();
++    if (!r) s_wake_cb = cb;
++    xSemaphoreGive(s_mic_lock);
++    return r;
++}
++void plat_audio_wake_stop(void)
++{
++    if (!s_mic_lock) return;
++    xSemaphoreTake(s_mic_lock, portMAX_DELAY);
++    s_wake_cb = NULL;
++    stop_unused();
++    xSemaphoreGive(s_mic_lock);
+ }
+ 
+ int plat_audio_write(const int16_t *pcm, size_t samples)
+--- a/arcs/platform/arcs/platform_arcs.h
++++ b/arcs/platform/arcs/platform_arcs.h
+@@ -73,6 +73,9 @@
+ typedef void (*plat_audio_mic_cb_t)(const int16_t *pcm, size_t samples);
+ int plat_audio_mic_start(plat_audio_mic_cb_t cb);
+ void plat_audio_mic_stop(void);
++/* Idle-only microphone owner. Voice capture takes exclusive callback priority. */
++int plat_audio_wake_start(plat_audio_mic_cb_t cb);
++void plat_audio_wake_stop(void);
+ void plat_audio_mic_stereo(bool on);   /* debug: interleaved L/R (R carries the speaker reference) */
+ 
+ /* ---- Wall clock (SNTP). TLS certificate checks need it. ---- */
+--- a/esp32/main/noise_control.cpp
++++ b/esp32/main/noise_control.cpp
+@@ -60,6 +60,11 @@
+ }
+ #endif
+ }
++
++/* Platforms with a local wake engine may expose its runtime readiness. */
++#ifndef NOISE_CTRL_WAKEUP_SUPPORTED
++#define NOISE_CTRL_WAKEUP_SUPPORTED false
++#endif
+ 
+ #include <xplat/noise/core/ClientSession.h>
+ #include <xplat/noise/core/PsaCryptoBackend.h>
+@@ -1306,7 +1311,7 @@
+     cJSON_AddStringToObject(params, "version", desc ? desc->version : "unknown");
+     cJSON_AddStringToObject(params, "device_family", NOISE_CTRL_DEVICE_FAMILY);
+     cJSON_AddStringToObject(params, "model_id", NOISE_CTRL_MODEL_ID);
+-    cJSON_AddBoolToObject(params, "is_wakeup_supported", false);
++    cJSON_AddBoolToObject(params, "is_wakeup_supported", NOISE_CTRL_WAKEUP_SUPPORTED);
+     cJSON *metadata = nullptr;
+     add_register_metadata_string(&metadata, params, "network_ssid", wifi_ssid);
+     // Who this gadget is (contracts/gadget-identity.md in impoai/impo): an

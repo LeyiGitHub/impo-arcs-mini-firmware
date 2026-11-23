@@ -13,6 +13,7 @@
 #include "pinmux.h"
 #include "yunbao_display.h"
 #include "yunbao_screen_ui.h"
+#include "gadget_voice.h"
 #define TAG "yunbao_display"
 #include "lisa_log.h"
 
@@ -59,7 +60,7 @@ static void display_task(void *arg)
         .pitch = YUNBAO_SCREEN_WIDTH, .buf_size = YUNBAO_SCREEN_WIDTH*YUNBAO_SCREEN_HEIGHT*2 };
     int previous = -1;
     uint32_t previous_phase = UINT32_MAX;
-    bool previous_test = false;
+    bool previous_test = false, previous_wake = false, previous_dialogue = false;
     for (;;) {
         uint32_t now = (uint32_t)plat_uptime_ms();
         if (s_color_test && now-s_test_at >= 15000) s_color_test = false;
@@ -67,13 +68,13 @@ static void display_task(void *arg)
         bool animated = state == GADGET_STATUS_LISTENING || state == GADGET_STATUS_THINKING ||
                         state == GADGET_STATUS_SPEAKING || state == GADGET_STATUS_CONNECTING;
         uint32_t phase = animated ? now/400 : now%5000 >= 4800;
-        bool test = s_color_test;
-        if (previous != (int)state || previous_phase != phase || previous_test != test) {
-            yunbao_screen_render(pixels, caps.width, caps.height, state, now, test);
+        bool test = s_color_test, wake = gadget_voice_wakeup_available(), dialogue = gadget_voice_continuous_active();
+        if (previous != (int)state || previous_phase != phase || previous_test != test || previous_wake != wake || previous_dialogue != dialogue) {
+            yunbao_screen_render(pixels, caps.width, caps.height, state, now, test, wake, dialogue);
             r = lisa_display_write(dev, 0, 0, &desc, pixels);
             if (r) { s_error = r; LISA_LOGE(TAG, "frame write failed: %d", r); }
             else { s_error = 0; s_frames++; }
-            previous = state; previous_phase = phase; previous_test = test;
+            previous = state; previous_phase = phase; previous_test = test; previous_wake = wake; previous_dialogue = dialogue;
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }

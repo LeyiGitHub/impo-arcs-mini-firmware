@@ -10,3 +10,10 @@ G=upstream/arcs/gadget
   -I"$J" -Itests/audio_stubs -I"$G" -Iupstream/arcs/link \
   tests/test_voice_capture.c "$G/gadget_voice_logic.c" "$G/gadget_pcm.c" "$J/cJSON.c" -lm -o "$output/voice"
 "$output/voice"
+B=firmware/boards/arcs_mini_yunbao/gadget
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$J" -I"$B" \
+  tests/test_wake_resources.c "$B/yunbao_wake_resources.c" "$J/cJSON.c" -lm -o "$output/wake"
+"$output/wake"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/audio_stubs \
+  tests/test_mic_ownership.c -o "$output/mic"
+"$output/mic"
