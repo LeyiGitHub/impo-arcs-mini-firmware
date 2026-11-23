@@ -33,9 +33,10 @@
 
 #define FRAME             320                 /* 20 ms at 16 kHz */
 #define FRAME_MS          20
-#define MIC_BUFFER_MS     10000               /* the upload may lag; nothing is dropped */
+#define MIC_BUFFER_MS     1000                /* no network waits while the mic is running */
 #define STAGE_BYTES       6144                /* PCM per upload chunk: 8192 base64 chars */
-#define REPLY_WAIT_MS     60000
+#define UPLOAD_WAIT_MS    120000
+#define REPLY_WAIT_MS     120000
 #define TURN_QUIET_MS     3000                /* after the last reply is spoken */
 #define LINE_MAX          (16 * 1024)
 
@@ -212,39 +213,41 @@ static void wait_sound_done(uint32_t max_ms)
     }
 }
 
-/* Records until a pause, uploading as it goes. Returns true when speech was sent. */
+/* Capture a complete bounded note before any upload can block this task.
+ * Large allocations use PSRAM; the mic queue only bridges audio dispatch jitter. */
 static bool listen(const char *test_text)
 {
-    /* Big buffers live in PSRAM (allocated once): internal RAM is tight. */
-    static uint8_t *stage;
+    static uint8_t *note;
     static char *enc;
-    if (stage == NULL) {
-        stage = malloc(STAGE_BYTES);
-        enc = malloc(STAGE_BYTES / 3 * 4 + sizeof(NOTE_TAIL) + 4);
-        if (stage == NULL || enc == NULL) {
-            return false;
-        }
+    const size_t capacity = sizeof(WAV_HEAD) + GADGET_SOUND_RATE * 2u * GADGET_VAD_MAX_MS / 1000u;
+    if (note == NULL) {
+        note = malloc(capacity);
     }
-    size_t staged = sizeof(WAV_HEAD);
-    memcpy(stage, WAV_HEAD, sizeof(WAV_HEAD));
-
-    s_acked = false;
-    s_note = impo_link_stream_open("/chat/stream", "application/json", NULL, NOTE_HEAD, strlen(NOTE_HEAD), true,
-                                   &s_note_sink);
-    if (s_note < 0) {
-        LISA_LOGW(TAG, "not connected to Impo");
+    if (enc == NULL) {
+        enc = malloc(STAGE_BYTES / 3 * 4 + sizeof(NOTE_TAIL) + 4);
+    }
+    if (note == NULL || enc == NULL || impo_link_state() != IMPO_LINK_ONLINE) {
         gadget_sound_beep_down();
         return false;
     }
+    size_t recorded = sizeof(WAV_HEAD);
+    memcpy(note, WAV_HEAD, sizeof(WAV_HEAD));
     if (test_text == NULL) {
         gadget_sound_beep();
         wait_sound_done(1000);
-        vTaskDelay(pdMS_TO_TICKS(150));   /* the beep's tail in the amplifier and DMA */
+        vTaskDelay(pdMS_TO_TICKS(150));
     } else {
-        /* Self-test: the words play from our own speaker; start recording once they do. */
         gadget_speech_say(test_text);
-        for (int i = 0; i < 150 && gadget_sound_state() != GADGET_SOUND_PLAYING; i++) {
+        for (int i = 0; i < 1200 && gadget_sound_state() != GADGET_SOUND_PLAYING; i++) {
+            if (gadget_sound_state() == GADGET_SOUND_FAILED) {
+                break;
+            }
             vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (gadget_sound_state() != GADGET_SOUND_PLAYING) {
+            LISA_LOGW(TAG, "self-test speech did not become ready; recording skipped");
+            end_turn(true);
+            return false;
         }
     }
     xStreamBufferReset(s_mic);
@@ -272,29 +275,20 @@ static bool listen(const char *test_text)
             break;
         }
         if (have < sizeof(frame)) {
+            if ((uint32_t)plat_uptime_ms() - wall0 >= GADGET_VAD_MAX_MS + 2000u) {
+                why = "mic timeout";
+                break;
+            }
             continue;
         }
         have = 0;
         vr = gadget_vad_frame(&vad, gadget_pcm_rms(frame, FRAME), FRAME_MS);
-        const uint8_t *src = (const uint8_t *)frame;
-        size_t take = sizeof(frame);
-        while (take > 0 && why == NULL) {
-            size_t n = STAGE_BYTES - staged < take ? STAGE_BYTES - staged : take;
-            memcpy(stage + staged, src, n);
-            staged += n;
-            src += n;
-            take -= n;
-            if (staged == STAGE_BYTES) {
-                size_t e = gadget_base64(stage, staged, enc);
-                if (impo_link_stream_send(s_note, enc, e, false) != 0) {
-                    why = "upload failed";
-                }
-                staged = 0;
-            }
-        }
-        if (why != NULL) {
+        if (recorded + sizeof(frame) > capacity) {
+            why = "record limit";
             break;
         }
+        memcpy(note + recorded, frame, sizeof(frame));
+        recorded += sizeof(frame);
     }
     plat_audio_mic_stop();
     s_touch = false;
@@ -304,24 +298,54 @@ static bool listen(const char *test_text)
     LISA_LOGI(TAG, "listened %u ms in %u ms (floor %u, threshold %u), ended by %s; mic dropped %u bytes",
               (unsigned)vad.t_ms, (unsigned)((uint32_t)plat_uptime_ms() - wall0), (unsigned)vad.floor_min,
               (unsigned)vad.threshold, why, (unsigned)s_mic_dropped);
-    if (!vad.heard || strcmp(why, "upload failed") == 0) {
+    if (!vad.heard || s_mic_dropped != 0 || strcmp(why, "mic timeout") == 0) {
         end_turn(test_text != NULL);
         gadget_sound_beep_down();
         return false;
     }
-    size_t e = gadget_base64(stage, staged, enc);
-    memcpy(enc + e, NOTE_TAIL, sizeof(NOTE_TAIL) - 1);
-    e += sizeof(NOTE_TAIL) - 1;
-    if (impo_link_stream_send(s_note, enc, e, true) != 0) {
-        end_turn(true);
-        return false;
-    }
-    s_note = -1;   /* the link finishes it; the ack arrives in note_end */
     if (test_text == NULL) {
         gadget_sound_beep_down();
     } else {
-        wait_sound_done(15000);   /* let our own test sentence finish before replies play */
+        wait_sound_done(15000);
     }
+    /* Exact RIFF/data lengths: the complete PCM note is now in memory. */
+    uint32_t pcm_size = (uint32_t)(recorded - sizeof(WAV_HEAD));
+    for (unsigned i = 0; i < 4; i++) {
+        note[4 + i] = (uint8_t)((pcm_size + 36u) >> (8u * i));
+        note[40 + i] = (uint8_t)(pcm_size >> (8u * i));
+    }
+    s_state = GADGET_VOICE_THINKING;
+    s_acked = false;
+    s_note = impo_link_stream_open("/chat/stream", "application/json", NULL, NOTE_HEAD, strlen(NOTE_HEAD), true,
+                                   &s_note_sink);
+    if (s_note < 0) {
+        end_turn(false);
+        return false;
+    }
+    uint64_t upload0 = plat_uptime_ms();
+    for (size_t off = 0; off < recorded;) {
+        if (s_touch || s_note_failed || plat_uptime_ms() - upload0 >= UPLOAD_WAIT_MS) {
+            LISA_LOGW(TAG, "note upload cancelled: %u/%u bytes queued", (unsigned)off, (unsigned)recorded);
+            end_turn(true);
+            return false;
+        }
+        size_t n = recorded - off < STAGE_BYTES ? recorded - off : STAGE_BYTES;
+        size_t e = gadget_base64(note + off, n, enc);
+        bool last = off + n == recorded;
+        if (last) {
+            memcpy(enc + e, NOTE_TAIL, sizeof(NOTE_TAIL) - 1);
+            e += sizeof(NOTE_TAIL) - 1;
+        }
+        if (impo_link_stream_send(s_note, enc, e, last) != 0) {
+            LISA_LOGW(TAG, "note upload failed: %u/%u bytes queued", (unsigned)off, (unsigned)recorded);
+            end_turn(true);
+            return false;
+        }
+        off += n;
+    }
+    LISA_LOGI(TAG, "note queued: %u PCM bytes in %u ms", (unsigned)pcm_size,
+              (unsigned)(plat_uptime_ms() - upload0));
+    s_note = -1;   /* the link finishes it; note_end reports server acceptance */
     return true;
 }
 
