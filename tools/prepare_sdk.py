@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Install only this project's board and public defaults into the pinned SDK."""
-import argparse, json, shutil, subprocess
+"""Apply reviewed SDK patches, board files and public defaults to the pinned SDK."""
+import argparse, json, os, shutil, subprocess, tempfile
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 def prepare(sdk):
@@ -14,8 +14,20 @@ def prepare(sdk):
     actual = subprocess.check_output(["git", "-C", str(sdk), "rev-parse", "HEAD"], text=True).strip()
     if actual != expected:
         raise SystemExit("SDK revision mismatch: inspect the pinned upstream checkout")
-    if subprocess.run(["git", "-C", str(sdk), "diff", "--quiet", "HEAD", "--", "arcs", "esp32"]).returncode:
-        raise SystemExit("Official SDK tracked files have local changes; inspect them before building")
+    patches = sorted((ROOT / "patches").glob("*.patch"))
+    # Calculate the expected patched tree without changing the user's Git index.
+    with tempfile.TemporaryDirectory() as temp:
+        env = dict(os.environ, GIT_INDEX_FILE=str(Path(temp) / "index"))
+        git = ["git", "-C", str(sdk)]
+        subprocess.run([*git, "read-tree", "HEAD"], env=env, check=True)
+        for patch in patches:
+            subprocess.run([*git, "apply", "--cached", str(patch)], env=env, check=True)
+        expected_tree = subprocess.check_output([*git, "write-tree"], env=env, text=True).strip()
+    if subprocess.run([*git, "diff", "--quiet", expected_tree, "--", "arcs", "esp32"]).returncode:
+        if subprocess.run([*git, "diff", "--quiet", "HEAD", "--", "arcs", "esp32"]).returncode:
+            raise SystemExit("SDK changes differ from this project's patches; inspect before building")
+        for patch in patches:
+            subprocess.run([*git, "apply", str(patch)], check=True)
     source = ROOT / "firmware/boards/arcs_mini_yunbao"
     dest = sdk / "arcs/boards/arcs_mini_yunbao"
     for file in source.rglob("*"):

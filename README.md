@@ -2,7 +2,7 @@
 
 基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的云宝语音盒子固件工程。设备自己连接 `gadgets.impo.ai`，使用官方 BLE 配对、Noise 链路、设备命令和语音回合；不依赖原来的 Mac / ACK / LifeLike 桥接服务。
 
-这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 的固定提交获取到 `upstream/`，板级适配位于 `firmware/boards/arcs_mini_yunbao`，共享链路与语音代码不另写一份。
+这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 的固定提交获取到 `upstream/`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录官方 ARCS 语音播放的缓冲修正；共享链路与语音代码不另写一份。
 
 ## 当前状态
 
@@ -28,7 +28,7 @@ macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker
 
 先核实板型、备份完整闪存，按 [刷写和恢复说明](docs/FLASHING.md) 只更新 CP 应用。接着在 Impo 的设备设置打开开发者模式，通过 BLE 添加 `ImpoGadget-XXXXXX`。SSID、密码和设备凭据通过官方配对保存到设备；公开固件不内置凭据。配对后短按 PB04 电源键触发语音，停顿后由 Impo 处理并通过盒子扬声器回复。完整语音仍在调试，当前存在 TLS 写超时和重连问题，尚不能作为稳定可用固件。
 
-屏幕目前不能指示联网状态。通过单个 ADB 交互 shell 读取 `pair`、`link`、`gadget device.health`：`paired=1` 表示已保存配对，`state=online` 表示已建立 Impo 链路；两者都不等于语音验收成功。不要把这些命令的原始输出发布到公开仓库。
+屏幕目前不能指示联网状态。通过单个 ADB 交互 shell 读取 `pair`、`link`、`gadget device.health`：`paired=1` 表示已保存配对，`state=online` 表示已建立 Impo 链路；注册成功还应检查 `link.register acked`，语音需单独听测。不要把这些命令的原始输出发布到公开仓库。
 
 基础命令直接来自官方 SDK：`device.health`、`device.set_name`、`speaker.say`、`speaker.play_url`、`speaker.set_volume`、`speaker.beep`、`speaker.stop`、`speaker.status`。`python3 tools/gen_manifest.py` 可生成与实际命令一致的产品清单；不借用机器狗产品 ID。
 
@@ -39,7 +39,7 @@ sh tests/run.sh
 ARCS_BASE=/path/to/arcs-sdk-0.1.6 sh upstream/arcs/tests/host/run.sh
 ```
 
-第一项检查真实按键策略；第二项运行官方 SDK 的配对、音频、语音、策略与链路纯逻辑测试。首次运行第二项前执行 `python3 tools/prepare_sdk.py`。
+第一项获取固定 SDK、应用补丁，检查按键策略和音频队列的缓冲行为；第二项运行官方 SDK 的配对、音频、语音、策略与链路纯逻辑测试。
 
 ## 许可证
 
