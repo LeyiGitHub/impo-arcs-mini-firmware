@@ -14,4 +14,5 @@ gadget=upstream/arcs/gadget
 python3 -m py_compile tools/prepare_sdk.py tools/build.py tools/gen_manifest.py
 if [ -n "${ARCS_BASE:-}" ]; then
     sh tests/run_tls.sh
+    sh tests/run_voice.sh
 fi
