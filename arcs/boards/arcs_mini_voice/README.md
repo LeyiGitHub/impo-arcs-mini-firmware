@@ -61,8 +61,10 @@ phone hotspot (about 38 s to playback); on the original network, Wi-Fi stayed
 associated while TLS writes timed out and the session reconnected.
 
 The upstream adaptation changes identity/symbol names and the screen title.
-Host checks and cross-compilation are rerun for this version; it has not been
-flashed again as part of PR preparation. Prior hearing/display results apply
+Host checks and cross-compilation passed for this version (ListenAI SDK
+0.1.6; app 1790128 bytes; internal SRAM 150,896 / 167,936 bytes). The
+image SHA256 is `1d3f98e047be25836bd72957853c24c1786a88084a826c03276dcbcab2983c24`. It has not been flashed
+again as part of PR preparation. Prior hearing/display results apply
 to that earlier image, not to a new physical regression of this branch alone.
 The voice tests above used companion patches and do not establish reliable
 conversation with the upstream voice/transport implementation by itself.
