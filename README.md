@@ -9,7 +9,8 @@
 - 云宝板级目标已实现：扬声器功放 PA01、左声道麦克风、PB04 按键。
 - 2026-11-23 已通过一次实物问答：用户短按后问“二加三等于几”，Impo 回复“五”，用户确认听到完整回答；该回合约 24 秒后开始播放。当前仍存在连接停顿与重连，不能据此宣称稳定性通过。
 - 短按电源键开始或停止语音回合，长按沿用 SDK 关机策略；不沿用旧 LifeLike 唤醒词。
-- 不注册机器狗的电机、步态、IMU、触摸或摄像头能力；屏幕、状态灯和电池曲线尚未适配，当前运行时会黑屏。
+- 已增加 ST7789P3 单屏中文状态页，接入连接、聆听、思考和回答状态，详见 [屏幕适配](docs/SCREEN.md) 和验收记录。
+- 不注册机器狗的电机、步态、IMU、触摸或摄像头能力；独立状态灯和电池曲线尚未适配。
 - 主机测试、完整编译、实机刷写、Impo 配对和真实语音验收分别记录在 [验收状态](docs/VALIDATION.md)。代码存在不表示实机通过。
 
 ## 获取和构建
@@ -29,9 +30,9 @@ macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker
 
 先核实板型、备份完整闪存，按 [刷写和恢复说明](docs/FLASHING.md) 只更新 CP 应用。接着在 Impo 的设备设置打开开发者模式，通过 BLE 添加 `ImpoGadget-XXXXXX`。SSID、密码和设备凭据通过官方配对保存到设备；公开固件不内置凭据。配对后短按 PB04 电源键触发语音，停顿后由 Impo 处理并通过盒子扬声器回复。已通过一次真实问答与完整听测；仍存在 TLS 写超时、语音下载停顿和重连问题，尚不能作为稳定可用固件。
 
-屏幕目前不能指示联网状态。通过单个 ADB 交互 shell 读取 `pair`、`link`、`gadget device.health`：`paired=1` 表示已保存配对，`state=online` 表示已建立 Impo 链路；注册成功还应检查 `link.register acked`，语音需单独听测。不要把这些命令的原始输出发布到公开仓库。
+屏幕“待机”跟随 SDK 客户端在线状态。通过单个 ADB 交互 shell 读取 `pair`、`link`、`gadget device.health`：`paired=1` 表示已保存配对，`state=online` 表示已建立 Impo 链路；注册成功还应检查 `link.register acked`，语音需单独听测。`screen` 可查看显示写帧状态，`screen test` 可测试颜色；驱动回执不能代替实物验收。不要把这些命令的原始输出发布到公开仓库。
 
-基础命令直接来自官方 SDK：`device.health`、`device.set_name`、`speaker.say`、`speaker.play_url`、`speaker.set_volume`、`speaker.beep`、`speaker.stop`、`speaker.status`。`python3 tools/gen_manifest.py` 可生成与实际命令一致的产品清单；不借用机器狗产品 ID。
+基础命令直接来自官方 SDK：`device.health`、`device.set_name`、`speaker.say`、`speaker.play_url`、`speaker.set_volume`、`speaker.beep`、`speaker.stop`、`speaker.status`、`display.show_animation`。`python3 tools/gen_manifest.py` 可生成与实际命令一致的产品清单；不借用机器狗产品 ID。
 
 ## 测试
 
@@ -41,10 +42,10 @@ ARCS_BASE=/path/to/arcs-sdk-0.1.6 sh tests/run_tls.sh
 ARCS_BASE=/path/to/arcs-sdk-0.1.6 sh upstream/arcs/tests/host/run.sh
 ```
 
-第一项获取固定 SDK、应用补丁，检查按键策略和音频队列的缓冲行为；第二项检查真实平台 TLS 读取函数的非阻塞、超时行为和 TCP_NODELAY 的参数与失败容错；第三项运行官方 SDK 的配对、音频、语音、策略与链路纯逻辑测试。设置了 `ARCS_BASE` 时，第一项也会运行 TLS 读取测试。
+第一项获取固定 SDK、应用补丁，检查按键策略、屏幕渲染边界和音频队列的缓冲行为；第二项检查真实平台 TLS 读取函数的非阻塞、超时行为和 TCP_NODELAY 的参数与失败容错；第三项运行官方 SDK 的配对、音频、语音、策略与链路纯逻辑测试。设置了 `ARCS_BASE` 时，第一项也会运行 TLS 读取测试。
 
 设置 `ARCS_BASE` 后，第一项还会执行真实语音任务的录音与上传测试；也可单独运行 `sh tests/run_voice.sh`。它检查网络调用发生前麦克风已停止、PCM 顺序与 WAV 长度、慢上传、静音、失败和取消期限。
 
 ## 许可证
 
-新增代码采用 MIT；保留的 ListenAI 板级声明采用 Apache-2.0。参见 `LICENSE`、`LICENSE-APACHE`、`NOTICE` 及下载的官方 SDK 授权文件。凭据、配对、设备日志、原机备份与用户状态禁止提交。
+新增代码采用 MIT；保留的 ListenAI 板级声明采用 Apache-2.0，中文位图字形采用 SIL OFL 1.1。参见 `LICENSE`、`LICENSE-APACHE`、`LICENSE-OFL`、`NOTICE` 及下载的官方 SDK 授权文件。凭据、配对、设备日志、原机备份与用户状态禁止提交。

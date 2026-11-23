@@ -9,6 +9,7 @@
 #include "platform_arcs.h"
 #include "gadget_board.h"
 #include "yunbao_button.h"
+#include "yunbao_display.h"
 
 static lisa_device_t *s_amp, *s_gpio;
 static yunbao_button_t s_button;
@@ -23,6 +24,8 @@ static int init(void)
     if (!lisa_device_ready(s_amp) || !lisa_device_ready(s_gpio)) return -1;
     lisa_gpio_configure(s_amp, PA_EN_PIN, LISA_GPIO_OUTPUT | LISA_GPIO_OUTPUT_INIT_LOW);
     lisa_gpio_configure(s_gpio, POWER_KEY_PIN, LISA_GPIO_CONFIG_INPUT_PULLUP);
+    /* A screen failure must not prevent the independent voice path from starting. */
+    yunbao_display_start();
     return 0;
 }
 static unsigned poll_buttons(void)
@@ -42,7 +45,8 @@ static const char s_instructions[] =
     "A short click of the power button starts or stops a voice turn. "
     "Replies are spoken by its own speaker. Reply in the user's language, "
     "in one to three short sentences without Markdown. "
-    "It has no advertised camera, screen, robot movement or motion sensor.";
+    "Its screen shows connection and voice status automatically. "
+    "It has no advertised camera, robot movement or motion sensor.";
 static const gadget_board_t s_board = {
     .name = "云宝",
     .model_id = "arcs-mini-yunbao",
@@ -54,6 +58,8 @@ static const gadget_board_t s_board = {
     .poll_buttons = poll_buttons,
     .read_power = read_power,
     .power_off = power_off,
+    .show_status = yunbao_display_show,
+    .show_animation = yunbao_display_restore,
     .instructions = s_instructions,
 };
 const gadget_board_t *gadget_board_get(void) { return &s_board; }

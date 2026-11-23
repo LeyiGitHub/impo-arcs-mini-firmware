@@ -7,6 +7,14 @@
 #define LED_PIN 1
 #define POWER_EN_PIN 3
 #define POWER_KEY_PIN 4
+#define LCD_PWM_PIN 21
+#define LCD_CS_PIN 22
+#define LCD_CD_PIN 23
+#define LCD_SPI_DATA_PIN 24
+#define LCD_SPI_CLK_PIN 25
+#define LCD_RST_PIN 9
 void lisa_gpioa_pinmux(void);
 void lisa_gpiob_pinmux(void);
 void lisa_uart0_pinmux(void);
+void lisa_pwm_pinmux(void);
+void lisa_spi0_pinmux(void);
