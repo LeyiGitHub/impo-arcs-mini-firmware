@@ -1,0 +1,26 @@
+diff --git a/arcs/platform/arcs/plat_tls.c b/arcs/platform/arcs/plat_tls.c
+--- a/arcs/platform/arcs/plat_tls.c
++++ b/arcs/platform/arcs/plat_tls.c
+@@ -30,9 +30,10 @@
+ #include "lisa_log.h"
+ 
+ /*
+- * The socket is non-blocking: the SDK's mbedtls_net_recv_timeout() only honours
+- * its timeout that way (on a blocking socket recv() waits forever). Writes that
+- * cannot go out yet are retried every POLL_MS for at most WRITE_TIMEOUT_MS.
++ * Keep the socket and receive BIO non-blocking; this file owns the deadlines.
++ * The SDK's recv_timeout(0) changed from an immediate poll in 0.1.6 to an
++ * infinite wait in 0.1.8. Using it would stall the shared RX/TX session when
++ * the peer is quiet. Writes retry every POLL_MS for at most WRITE_TIMEOUT_MS.
+  */
+ #define POLL_MS           10
+ #define WRITE_TIMEOUT_MS  15000
+@@ -184,7 +185,7 @@
+         log_error("setup", ret);
+         goto fail;
+     }
+-    mbedtls_ssl_set_bio(&t->ssl, &t->net, mbedtls_net_send, NULL, mbedtls_net_recv_timeout);
++    mbedtls_ssl_set_bio(&t->ssl, &t->net, mbedtls_net_send, mbedtls_net_recv, NULL);
+ 
+     uint64_t hs_start = plat_uptime_ms();
+     while ((ret = mbedtls_ssl_handshake(&t->ssl)) != 0) {

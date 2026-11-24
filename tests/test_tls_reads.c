@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "mbedtls/ssl.h"
+#include "mbedtls/net_sockets.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/sha256.h"
 static int fake_seed(mbedtls_ctr_drbg_context *ctx,
@@ -21,10 +22,17 @@ static int handshake_result;
 static int fake_handshake(mbedtls_ssl_context *ssl)
 {
     assert(ssl->conf->authmode == MBEDTLS_SSL_VERIFY_REQUIRED);
+    /* 0.1.8 recv_timeout(0) waits forever: the session must use a poll BIO. */
+    assert(ssl->f_recv == mbedtls_net_recv && ssl->f_recv_timeout == NULL);
     return handshake_result;
 }
+static bool real_read;
+static unsigned recv_calls;
+static int real_ssl_read(mbedtls_ssl_context *ssl, unsigned char *buf, size_t len)
+{ return mbedtls_ssl_read(ssl, buf, len); }
 static int fake_ssl_read(mbedtls_ssl_context *ssl, unsigned char *buf, size_t len)
 {
+    if (real_read) return real_ssl_read(ssl, buf, len);
     (void)ssl; (void)buf; (void)len;
     assert(calls < 50); /* A regression must fail, rather than hang the host test. */
     unsigned i = calls++;
@@ -61,9 +69,13 @@ void mbedtls_net_init(mbedtls_net_context *c) { c->fd = -1; }
 void mbedtls_net_free(mbedtls_net_context *c) { (void)c; }
 int mbedtls_net_set_nonblock(mbedtls_net_context *c) { (void)c; return 0; }
 int mbedtls_net_send(void *c, const unsigned char *b, size_t n)
-{ (void)c; (void)b; (void)n; return -1; }
+{ (void)c; (void)b; return (int)n; }
+int mbedtls_net_recv(void *c, unsigned char *b, size_t n)
+{ (void)c; (void)b; (void)n; recv_calls++; return MBEDTLS_ERR_SSL_WANT_READ; }
 int mbedtls_net_recv_timeout(void *c, unsigned char *b, size_t n, uint32_t ms)
-{ (void)c; (void)b; (void)n; (void)ms; return -1; }
+{ (void)c; (void)b; (void)n; (void)ms; assert(!"timeout BIO must not be used"); return -1; }
+static int test_rng(void *ctx, unsigned char *buf, size_t len)
+{ (void)ctx; memset(buf, 1, len); return 0; }
 
 static void sequence(int a, int b, size_t n)
 { outcomes[0] = a; outcomes[1] = b; outcomes_n = n; calls = delays = 0; now_ms = 0; }
@@ -100,6 +112,17 @@ int main(void)
     plat_tls_t *named = plat_tls_connect_named("gadget.itoy.cn", 9443, "gw.itoy.cn", 5000, &err);
     assert(named && !err && !strcmp(dial_host,"gadget.itoy.cn") && !strcmp(dial_port,"9443"));
     assert(!strcmp(named->ssl.hostname,"gw.itoy.cn"));
+    /* Let real mbedTLS start its handshake against a quiet peer. Both a poll
+     * and a bounded read must yield through the configured socket BIO. */
+    mbedtls_ssl_conf_rng(&named->conf, test_rng, NULL);
+    real_read = true;
+    now_ms = delays = recv_calls = 0;
+    assert(plat_tls_read(named, buf, sizeof(buf), 0) == PLAT_TLS_TIMEOUT);
+    assert(recv_calls > 0 && delays == 0);
+    recv_calls = 0;
+    assert(plat_tls_read(named, buf, sizeof(buf), 25) == PLAT_TLS_TIMEOUT);
+    assert(recv_calls > 0 && delays == 25);
+    real_read = false;
     /* Parse the firmware's real trust bundle, including the relay's new root. */
     bool relay_root_found = false;
     const unsigned char root_sha256[32] = {
@@ -120,4 +143,5 @@ int main(void)
     assert(err == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED);
     puts("TLS route: separate peer/SNI, required certificate verification and failure propagation passed");
     puts("TLS reads: nonblocking WANT_READ/WANT_WRITE, deadline, data, timeout, close and errors passed");
+    puts("TLS real receive BIO: quiet peer yields immediately and honors the caller deadline");
 }

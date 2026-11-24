@@ -52,6 +52,8 @@ python3 tools/build.py --docker --arcs-sdk-version 0.1.8 \
 
 Boot 1.1.9 还会保留旧 AP 看门狗。0.1.8 组件在最早的系统初始化阶段补回 0.1.6 的接管行为，按当前配置关闭该旧看门狗；Impo 的 `wdt0` 硬件看门狗及任务监控继续工作。启动日志报告旧 AP 看门狗接管前后的控制值和启用位，避免把写入校验通过当作持续运行通过。
 
+TLS 使用非阻塞 socket 及接收 BIO，由平台层控制握手和读取期限。聆思 0.1.8 将 `mbedtls_net_recv_timeout(..., 0)` 改成无限等待，因此不能用它实现共享链路的立即轮询，否则接收等待会堵住语音上传。适配共用于 0.1.6 和 0.1.8；不修改供应商 SDK，也不放宽证书校验。
+
 屏幕标题默认取 `display_name`，也可用 `screen_title` 单独设置；平台名称、型号和节点前缀同样由产品 JSON 生成。板级 overlay 不再设置产品身份。“云宝”只作为 `products/yunbao.json` 示例名称，底层目录名 `arcs_mini_yunbao` 是历史硬件标识，不决定设备名称。当前 Mini2 示例使用 “Arcs Mini 2” 和“小聆小聆”，名称与唤醒词相互独立。
 
 `products/arcs-mini2-xiaoling.json` 只接受清单中精确匹配的原机模型和 wrap；并非所有标为“小聆小聆”的模型都具有相同字节。原机资源摘要不同则须重新生成资源描述。启动、联网、屏幕和唤醒听测的实际验收边界见 `VALIDATION.md`。
