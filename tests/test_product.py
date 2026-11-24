@@ -43,8 +43,8 @@ class ProductTests(unittest.TestCase):
         self.assertNotIn('ni3 hao3 yun2 bao3',h)
     def test_mini2_latency_profiles(self):
         p=load_product(DEFAULT_PRODUCT.parent / 'arcs-mini2-latency-batch.json')
-        self.assertEqual(p['wake']['label'], '小聆小聆')
-        self.assertEqual(p['wake']['keywords'], ['xiao3 ling2 xiao3 ling2', '小聆小聆'])
+        self.assertEqual(p['wake']['label'], '小周小周')
+        self.assertEqual(p['wake']['keywords'], ['xiao3 zhou1 xiao3 zhou1', '小周小周'])
         overlap=load_product(DEFAULT_PRODUCT.parent / 'arcs-mini2-latency-overlap.json')
         self.assertEqual(p['wake'], overlap['wake'])
         self.assertEqual(p['voice']['upload_mode'], 'batch')

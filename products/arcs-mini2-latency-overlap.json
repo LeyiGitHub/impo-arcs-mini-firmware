@@ -13,6 +13,6 @@
   },
   "wake": {
     "enabled": true,
-    "bundle": "../resources/wake/xiaoling-preserved.json"
+    "bundle": "../resources/wake/xiaozhou-preserved.json"
   }
 }

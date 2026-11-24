@@ -20,7 +20,7 @@
 #define TAG "yunbao_wake"
 #include "lisa_log.h"
 #define FLASH_ROMFS ((const uint8_t *)0x30200000u)
-#define ROMFS_CAPACITY 0x400000u
+#define ROMFS_CAPACITY 0x180000u /* wake_word ends at emoji (0x30380000) */
 #define SAMPLES 256
 static StreamBufferHandle_t s_audio;
 static QueueHandle_t s_events;

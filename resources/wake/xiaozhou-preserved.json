@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "xiaozhou-single-mic",
+  "label": "小周小周",
+  "keywords": [
+    "xiao3 zhou1 xiao3 zhou1",
+    "小周小周"
+  ],
+  "model": {
+    "file": "cae_esr.bin",
+    "sha256": "74001669a9aaa0263fdb97fd6c736fa5edfe3f4f64188c8b56221f70db6664a6"
+  },
+  "wrap": {
+    "file": "wrap.json",
+    "sha256": "2243c6f2012e96ec0fdd3a39ce66a4a3044aad43597bd0882f513745dca875a6"
+  }
+}
