@@ -47,6 +47,18 @@ ARCS_BASE=/path/to/listenai-arcs-sdk-0.1.8 \
 
 产品配置不绑定聆思版本；同一产品源码也可按所核验的目标 AP 选择底层版本构建。上表记录现有设备的对应关系，不将“云宝”或“小聆小聆”当作选择底层版本的判断条件。
 
+## 语音优化产品
+
+公共 SDK 的 `voice` 产品选项和 `impo_arcs_voice.h` 对两个底层版本共用。
+`examples/voice_companion` 是无模型依赖的最小按键应用，显式选择 overlap / 1200 ms；
+按上面的版本规则选择依赖和输出目录。当前设备使用的
+`products/arcs-mini2-latency-overlap.json` 引用“小周小周”的精确资源，另有同资源
+batch 产品供回退；不能拿这个资源清单套用到模型不同的设备。
+
+当前 Mini2 性能数据仅来自已独立读回的 0.1.8 普通镜像。0.1.6 的编译及主机检查
+不等同于同一延迟收益的实机证明；新示例的构建结果也不替代精确镜像验收。
+见 [语音 SDK 接口](SDK.md#语音上传与阶段查询) 与 [测量记录](VOICE_LATENCY_VALIDATION.md)。
+
 ## 产物标记与验收
 
 两个输出目录内的镜像都叫 `impo-gadget.bin`，旁边的 `impo-sdk-build.json` 包含：

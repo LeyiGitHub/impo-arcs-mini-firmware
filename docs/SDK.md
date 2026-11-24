@@ -13,6 +13,7 @@
 | `sdk/include/`、`sdk/src/` | 公共 C/C++ 头文件、产品 API、应用扩展及通用唤醒资源校验 |
 | `firmware/boards/arcs_mini_yunbao/` | 同款硬件的引脚、屏幕、按键、功放和 AP 音频接入 |
 | `products/yunbao.json` | 保持“你好云宝”的默认产品 |
+| `examples/voice_companion/` | 无模型依赖的按键语音应用，显式选用边录边传并查询回合计数 |
 | `examples/button_companion/` | 名称为 Mini、关闭本地唤醒、保留连续对话及一个自定义命令的完整应用 |
 | `resources/wake/` | 唤醒资源的元数据；不包含模型或原机资源 |
 | `patches/` | 固定官方 SDK 上的可复核修正 |
@@ -96,6 +97,52 @@ python3 tools/build.py --docker \
 
 构建拒绝未知字段，包括 Wi-Fi 密码、账号凭据等。开发者使用自己的 Impo 账号配对，同款设备的设备身份不会从配置或示例复制。
 
+## 语音上传与阶段查询
+
+优化属于公共 SDK：产品选择策略，应用不复制采集、Link、Noise、WAV/Base64 或
+TTS 主流程。默认 `batch` 在收音结束后上传；显式选择 `overlap` 后，在确认语音时
+开始同一笔上传。两种模式都保留完整 PSRAM 录音和有界取消；未知结果不自动重发。
+当前官方网关的兼容检查和收益见 [实测记录](VOICE_LATENCY_VALIDATION.md)，不能
+自动推广到其他网关或设备。`/tts`、音色和播放缓冲策略未改。
+
+```json
+"voice": {"upload_mode": "overlap", "endpoint_pause_ms": 1200}
+```
+
+`voice` 可省略；缺省为 `batch` / 1200 ms。端点接受 600～2000 ms，但 800 ms
+在本机句中停顿测试中截尾，因此不作为推荐配置。直接接入示例：
+
+```sh
+python3 tools/build.py --docker --arcs-sdk-version 0.1.6 \
+  --product examples/voice_companion/product.json \
+  --app-dir examples/voice_companion
+```
+
+任务上下文可读取快照，或在整段连续会话结束、空闲时切换配置：
+
+```c
+#include "impo_arcs_mini.h"
+
+impo_arcs_voice_config_t config = {
+    .upload_overlap = true,
+    .endpoint_pause_ms = 1200,
+};
+int result = impo_arcs_mini_configure_voice(&config); /* 0 accepted, -1 refused */
+impo_arcs_voice_snapshot_t snapshot;
+impo_arcs_mini_voice_snapshot(&snapshot);
+```
+
+运行配置不写 KV，重启恢复产品 JSON。`snapshot.upload_overlap` 属于最近一轮，
+不能用来确认尚未开始的新配置。`valid_stages` 的第 n 位对应
+`impo_arcs_voice_stage_t` 的第 n 项；未置位时不解读该时间。
+`stage_ms` 只与同一启动内的设备单调时钟相减。`queued_bytes` 包含 WAV 头，表示
+进入本地队列，不是服务端已收到；`mic_dropped_bytes` 只覆盖云端收音，不能替代
+唤醒输入丢弃计数。先检查 `failed` 和完整阶段，再计算延迟。
+
+首 TTS 字节、首 PCM 和驱动首次写入另有带声音代次的日志；驱动写入不代表声学
+首声。测试方法见 [固定语料工具](VOICE_LATENCY_BENCH.md)。普通应用不包含
+`examples/voice_latency_probe` 诊断订阅。按句 TTS、预取及自适应起播尚未实现。
+
 ## 更换唤醒词
 
 配置同时控制显示文本和引擎结果过滤。声学识别仍由 AP 模型完成：修改字符串不会训练模型，也不能让“你好云宝”模型识别另一个词。
@@ -151,6 +198,8 @@ python3 tools/package_sdk.py --output /path/to/output
 ```
 
 自定义应用须将命令/事件的静态 C 表通过 `--commands FILE:TABLE`、`--events FILE:TABLE` 加入产品清单；可重复传入多个表。工具不能推断任意 C 程序动态生成的描述。默认固件已提供的命令由官方表生成，不能重复注册同名命令。
+
+GitHub Actions 的 `sdk-source` 任务也会生成同一源码包及摘要清单，下载入口位于对应提交的 Actions 运行。
 
 打包要求所有 SDK 更改已提交，仅导出 Git 跟踪源码，附版本、提交、依赖固定及源码摘要。ListenAI SDK、模型、AP、boot、生成固件、日志和凭据均不包含。刷写仍按 [分区核验流程](FLASHING.md) 进行。
 

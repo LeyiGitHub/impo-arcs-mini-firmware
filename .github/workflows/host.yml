@@ -8,3 +8,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sh tests/run.sh
+
+  bench-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install numpy
+      - run: python3 tests/test_voice_bench_analysis.py
+      - run: python3 tests/test_voice_bench_schedule.py
+      - run: python3 tests/test_voice_bench_export.py
+  sdk-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/package_sdk.py --output "$RUNNER_TEMP/sdk-source"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: impo-arcs-mini-sdk-source
+          path: ${{ runner.temp }}/sdk-source/*
+          if-no-files-found: error

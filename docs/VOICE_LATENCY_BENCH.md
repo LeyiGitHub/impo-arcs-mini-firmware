@@ -66,3 +66,14 @@ python3 tests/test_voice_bench_schedule.py
 再比较 VAD 最后有效帧与固定语料尾部。它检查输入截尾，不等待云端答案，也不计算
 回答延迟。需要提供已识别的设备、当前启动标识、录制程序及新的私有输出目录，
 参数见 `--help`。默认比较 1200 / 800 ms，不能把截短输入造成的更快结束算作收益。
+
+## 公开可复核数据
+
+`tools/export_voice_bench.py DIRECTORY --output public.json` 只导出固定字段的
+汇总、每轮计数及自动声学测量；不复制原始日志、录音、设备/会话标识、主机时间戳
+或异常正文。分享前仍核对公开文件。现有 [60轮短问数据](data/voice-latency-20261124-short-60.json)
+保留全部尝试和唯一失败，分位数仅来自成功且声学有效的样本。
+
+GitHub 的 `Host checks / sdk-source` 任务为每个提交生成固定源码 ZIP 和摘要清单，
+可从该提交的 Actions 运行下载 `impo-arcs-mini-sdk-source`。源码包本身不包含
+ListenAI SDK、固件镜像、模型、现场录音或配对凭据。SDK 使用与硬件验收分别记录。

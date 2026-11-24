@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "mini-voice-companion",
+  "display_name": "Mini",
+  "model_id": "arcs-mini-voice",
+  "node_prefix": "mini",
+  "product_id": null,
+  "continuous_dialogue": true,
+  "china_relay": true,
+  "voice": {"upload_mode": "overlap", "endpoint_pause_ms": 1200},
+  "wake": {"enabled": false}
+}
