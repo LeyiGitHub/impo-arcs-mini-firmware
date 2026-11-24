@@ -35,7 +35,7 @@ def load_product(path=DEFAULT_PRODUCT):
     path = Path(path).resolve()
     p = json.loads(path.read_text())
     object_keys(p, ["schema_version", "id", "display_name", "screen_title", "model_id", "node_prefix",
-                    "product_id", "continuous_dialogue", "china_relay", "instructions", "wake"], "product")
+                    "product_id", "continuous_dialogue", "wake_interrupt", "china_relay", "instructions", "wake"], "product")
     if p.get("schema_version") != 1:
         raise ValueError("Unsupported product schema_version")
     for key in ["id", "model_id", "node_prefix"]:
@@ -46,8 +46,8 @@ def load_product(path=DEFAULT_PRODUCT):
     if p.get("product_id") is not None and (not isinstance(p["product_id"], str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,39}", p["product_id"])):
         raise ValueError("product_id: expected null or a registered platform product ID")
     p["product_id"] = p.get("product_id")
-    for key in ["continuous_dialogue", "china_relay"]:
-        p[key] = boolean(p.get(key, True), key)
+    for key in ["continuous_dialogue", "china_relay", "wake_interrupt"]:
+        p[key] = boolean(p.get(key, key != "wake_interrupt"), key)
     w = p.get("wake", {})
     object_keys(w, ["enabled", "bundle"], "wake")
     enabled = boolean(w.get("enabled", False), "wake.enabled")
@@ -82,11 +82,15 @@ def load_product(path=DEFAULT_PRODUCT):
     elif "bundle" in w:
         raise ValueError("Remove wake.bundle when wake is disabled")
     p["wake"] = dict(bundle, enabled=enabled)
+    if p["wake_interrupt"] and not enabled:
+        raise ValueError("wake_interrupt requires an enabled wake model")
     prompt = (f"This gadget is {p['display_name']}, a stationary ARCS Mini voice companion. "
               + (f"Say {bundle['label']} or short click the main function button to start a conversation. "
                  if enabled else "Short click the main function button to start a conversation. ")
               + ("After each answer wait for the listening prompt before speaking again. Five seconds of silence or a short click ends the conversation. "
                  if p["continuous_dialogue"] else "Each interaction records one question and speaks its answer. ")
+              + (f"During a reply say {bundle['label']} to interrupt, then wait for the prompt before asking again. "
+                 if p["wake_interrupt"] else "")
               + "Replies are spoken by its own speaker. Reply in the user's language in one to three short sentences without Markdown. "
               "Its screen shows connection and voice status automatically. No camera, movement or motion sensor is advertised.")
     p["instructions"] = text(p.get("instructions", prompt), "instructions", 1500, multiline=True)
@@ -99,6 +103,7 @@ def generated_files(p, font=None):
               "IMPO_MODEL_ID": q(p["model_id"]), "IMPO_PLATFORM_PRODUCT_ID": q(p["product_id"]) if p["product_id"] else "NULL",
               "IMPO_SCREEN_TITLE": q(p["screen_title"]), "IMPO_INSTRUCTIONS": q(p["instructions"]),
               "IMPO_CONTINUOUS_DIALOGUE": str(p["continuous_dialogue"]).lower(),
+              "IMPO_WAKE_INTERRUPT": str(p["wake_interrupt"]).lower(),
               "IMPO_WAKE_ENABLED": str(w["enabled"]).lower(), "IMPO_WAKE_LABEL": q(w["label"]),
               "IMPO_WAKE_KEYWORDS": "{" + ",".join(map(q, w["keywords"])) + "}" if w["keywords"] else "{NULL}",
               "IMPO_WAKE_KEYWORD_COUNT": str(len(w["keywords"]))}
@@ -111,6 +116,8 @@ def generated_files(p, font=None):
     for key, field in [("NODE_PREFIX", "node_prefix"), ("DISPLAY_NAME", "display_name"), ("MODEL_ID", "model_id")]:
         config += f"CONFIG_GADGET_{key}={q(p[field])}\n"
     config += "CONFIG_IMPO_CHINA_RELAY=" + ("y" if p["china_relay"] else "n") + "\n"
+    if p["wake_interrupt"]:
+        config += "CONFIG_LISA_AUDIO_RECORD_INDIVIDUAL_GAIN=y\n"
     glyphs = (ROOT / "sdk/assets/status_font.h").read_text()
     need = set(p["screen_title"] + w["label"])
     have = {chr(int(cp,16)) for cp in re.findall(r"\{0x([0-9a-fA-F]+),", glyphs)}

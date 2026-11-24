@@ -11,7 +11,7 @@ extern "C" {
 
 typedef struct {
     const char *id, *display_name, *model_id, *product_id, *instructions;
-    bool continuous_dialogue;
+    bool continuous_dialogue, wake_interrupt;
     impo_arcs_wake_config_t wake;
 } impo_arcs_mini_product_t;
 
@@ -35,6 +35,9 @@ const impo_arcs_mini_product_t *impo_arcs_mini_product(void);
 /* Task-context APIs, never ISR callbacks. Return -1 when unavailable/offline.
  * Conversation requests use the official voice state machine. */
 int impo_arcs_mini_begin_conversation(void);
+/* Stop the current reply and schedule fresh capture after the listening prompt.
+ * Requires product wake_interrupt and an online link; ignored during capture. */
+int impo_arcs_mini_interrupt_conversation(void);
 int impo_arcs_mini_say(const char *text);
 int impo_arcs_mini_set_wake_enabled(bool enabled);
 bool impo_arcs_mini_wake_available(void);

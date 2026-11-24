@@ -16,6 +16,8 @@ static bool mic_running, speech = true, missing_frames;
 static bool answer, reply_given, say_fails;
 static uint64_t playing_until;
 static unsigned interrupt_frame;
+static bool interrupt_reply;
+static unsigned speech_cancels, reply_queued;
 static uint8_t raw_note[500000];
 static size_t raw_n;
 
@@ -23,13 +25,18 @@ static int16_t sample_at(unsigned i)
 { return speech && i >= 25 && i < 60 ? (int16_t)(2000 + i) : 100; }
 
 uint64_t plat_uptime_ms(void) { return clock_ms; }
-void vTaskDelay(unsigned ms) { clock_ms += ms; }
+void vTaskDelay(unsigned ms) {
+ clock_ms += ms;
+ if (interrupt_reply && s_state==GADGET_VOICE_SPEAKING && clock_ms<playing_until) {
+  interrupt_reply=false;assert(gadget_voice_interrupt());
+ }
+}
 void test_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
 int xTaskCreate(void (*f)(void *), const char *n, unsigned d, void *a, unsigned p, TaskHandle_t *h)
 { (void)f; (void)n; (void)d; (void)a; (void)p; (void)h; return pdPASS; }
 QueueHandle_t xQueueCreate(unsigned n, unsigned size) { (void)n; (void)size; return (void *)1; }
 int xQueueSend(QueueHandle_t q, const void *p, unsigned ms)
-{ (void)q; (void)p; (void)ms; return pdTRUE; }
+{ (void)q; (void)ms; reply_queued++; free(*(char *const *)p); return pdTRUE; }
 int xQueueReceive(QueueHandle_t q, void *p, unsigned ms)
 { (void)q; (void)ms;
   if (answer && final_n && !reply_given) { *(char **)p = strdup("five"); reply_given=true; return pdTRUE; }
@@ -56,7 +63,8 @@ int plat_audio_mic_start(plat_audio_mic_cb_t cb)
 void plat_audio_mic_stop(void) { assert(mic_running); mic_running = false; }
 int gadget_sound_beep(void) { return 0; }
 int gadget_sound_beep_down(void) { return 0; }
-void gadget_sound_stop(void) {}
+void gadget_sound_stop(void) { playing_until=0; }
+void gadget_speech_cancel(void) { speech_cancels++; gadget_sound_stop(); }
 gadget_sound_state_t gadget_sound_state(void) { return clock_ms < playing_until ? GADGET_SOUND_PLAYING : GADGET_SOUND_IDLE; }
 const char *gadget_sound_error(void) { return ""; }
 int gadget_speech_say(const char *text) { (void)text; if (say_fails) return -1; playing_until=clock_ms+200; return 0; }
@@ -96,6 +104,7 @@ static void reset(void)
     speech = true; missing_frames = false; s_touch = false; s_note = -1;
     s_note_failed = false; s_state = GADGET_VOICE_IDLE;
     s_continuous=s_session=s_stop=s_wake=s_followup=false;
+    s_interrupt=s_require_parent=interrupt_reply=false; speech_cancels=reply_queued=0;
     answer=reply_given=say_fails=false; playing_until=0; interrupt_frame=0;
 }
 static uint32_t u32(const uint8_t *p)
@@ -140,6 +149,24 @@ int main(void)
     assert(!s_session && !s_followup);
     reset(); per_send_ms=0; answer=true; gadget_voice_trigger(); run_requested_turn();
     assert(!s_session && !s_followup && reply_given); /* other boards remain one shot */
+    reset(); per_send_ms=0; answer=true; interrupt_reply=true;
+    gadget_voice_set_continuous(true); gadget_voice_trigger(); run_requested_turn();
+    assert(!interrupt_reply && s_interrupt && !s_session && !s_followup && playing_until==0);
+    assert(speech_cancels>=2); /* old TTS cancelled before new capture */
+    frame_n=send_n=opened=final_n=0;raw_n=0;reply_given=false;
+    run_requested_turn();
+    assert(!s_interrupt && s_session && s_followup && reply_given);
+    s_state=GADGET_VOICE_LISTENING;assert(!gadget_voice_interrupt());
+    /* Old or untagged subscription replies must not contaminate the new turn. */
+    s_state=GADGET_VOICE_THINKING;s_require_parent=true;s_acked=false;
+    char no_ack[]="{\"type\":\"event\",\"event\":\"message.assistant\",\"payload\":{\"id\":\"old1\",\"content\":\"old\",\"parent_message_id\":\"old-note\"}}";
+    on_line(NULL,no_ack);assert(reply_queued==0);
+    s_acked=true;strcpy(s_ack.message_id,"new-note");s_ack.reply_to_message_id[0]=0;
+    char old_reply[]="{\"type\":\"event\",\"event\":\"message.assistant\",\"payload\":{\"id\":\"old2\",\"content\":\"old\",\"parent_message_id\":\"old-note\"}}";
+    on_line(NULL,old_reply);assert(reply_queued==0);
+    char new_reply[]="{\"type\":\"event\",\"event\":\"message.assistant\",\"payload\":{\"id\":\"new1\",\"content\":\"new\",\"parent_message_id\":\"new-note\"}}";
+    on_line(NULL,new_reply);assert(reply_queued==1);
+    puts("Wake interrupt: stop old playback, fresh prompted capture and stale reply rejection passed");
     puts("Continuous voice: two turns, silent exit, click cancellation, TTS failure and opt-in passed");
     puts("Voice capture: full PCM before upload, exact WAV sizes, slow upload, silence, failure and deadline passed");
 }

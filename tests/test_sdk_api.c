@@ -9,6 +9,8 @@ static impo_link_state_t link_state;
 static gadget_voice_state_t voice_state;
 static bool continuous, available;
 static int starts, speech_calls;
+static bool interrupt_result;
+bool gadget_voice_interrupt(void) { return interrupt_result; }
 impo_link_state_t impo_link_state(void) { return link_state; }
 gadget_voice_state_t gadget_voice_state(void) { return voice_state; }
 bool gadget_voice_continuous_active(void) { return continuous; }
@@ -25,6 +27,9 @@ int main(int argc,char **argv)
     if (p->wake.enabled) assert(p->wake.keyword_count>0 && *p->wake.label && *p->wake.model_file);
     else assert(p->wake.keyword_count==0 && !*p->wake.label);
     assert(p && p->display_name && p->instructions && p->model_id);
+    assert(impo_arcs_mini_interrupt_conversation()==-1);
+    interrupt_result=true;
+    assert(impo_arcs_mini_interrupt_conversation()==(p->wake_interrupt?0:-1));
     assert(impo_arcs_mini_begin_conversation()==-1);
     link_state=IMPO_LINK_ONLINE;
     voice_state=GADGET_VOICE_LISTENING;

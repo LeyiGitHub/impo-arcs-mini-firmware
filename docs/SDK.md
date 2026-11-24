@@ -19,6 +19,7 @@
 
 - `impo_arcs_mini_product()`：读取本次构建的产品及唤醒配置，返回静态只读数据。
 - `impo_arcs_mini_begin_conversation()`：在线且空闲时请求官方语音回合；离线或正在对话时返回 −1。
+- `impo_arcs_mini_interrupt_conversation()`：启用 `wake_interrupt` 且在线时，停止当前回答并请求新一轮提示收音；正在录音或按键退出处理中返回 −1。
 - `impo_arcs_mini_say(text)`：通过官方 `/tts` 发起播放，立即返回；不代表播放完成。
 - `impo_arcs_mini_set_wake_enabled(bool)`、`impo_arcs_mini_wake_available()`：暂停/恢复已初始化的本地唤醒及读取可用性。产品关闭唤醒或初始化失败时不能凭此启用引擎。
 - `impo_arcs_mini_send_event()`：沿用官方事件及 JSON 所有权约定。
@@ -115,6 +116,14 @@ python3 tools/wake_bundle.py --id xiaoban-v1 \
 清单格式见 `resources/wake/yunbao-preserved.json`，包含标签、1–8 个结果词，以及模型和 wrap 的文件名、SHA256。启动时逐字节计算资源摘要，检查模型头和单麦 wrap，随后交给官方 ACOMP 初始化；缺失、不匹配或引擎失败时不报告唤醒可用，保留按键对话。哈希验证只确认资源身份，不能证明模型准确率、AP 兼容性或实际唤醒效果；新词仍须人工验收。
 
 清单可公开，模型的分发遵循其授权。源码包不附带原机模型和 wrap。
+
+### 唤醒词打断回答
+
+产品 JSON 可设置 `"wake_interrupt":true`，默认关闭，且必须启用本地唤醒。`arcs-mini2-xiaoling` 已选择该功能：设备播放或等待回答时，说配置的唤醒词，待旧语音停止并听到提示音后再说新问题。短按主功能键仍表示退出。该流程不把任意说话当作打断。
+
+板级音频用 Mini2 的左声道麦克风和右声道硬回采，向官方 ACOMP 提供 `mic0/ref0`；产品构建启用独立声道增益，麦克风 36 dB、回采 0 dB。前台录音从同一双声道流只提取左声道，避免把回采上传为用户语音，切换时不重启音频 DMA。其他接线必须先适配回采，不能只打开配置。
+
+打断立即清空本地待播缓冲，语音任务取消旧 `/tts`、清理排队回答，等待约 300 ms 的 DAC 尾音后提示重新收音；旧 TTS 不能继续填入已作废的播放代次。发生打断后，订阅回复须在新录音收到确认后携带匹配的父消息标识，防止旧回答串入新一轮。实物唤醒、回声误触发和打断听感单独记录在 [验收状态](VALIDATION.md)。
 
 ## 中文字体
 

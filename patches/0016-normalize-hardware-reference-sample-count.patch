@@ -1,0 +1,27 @@
+diff --git a/arcs/platform/arcs/plat_audio.c b/arcs/platform/arcs/plat_audio.c
+--- a/arcs/platform/arcs/plat_audio.c
++++ b/arcs/platform/arcs/plat_audio.c
+@@ -70,16 +70,20 @@
+     plat_audio_mic_cb_t cb = s_mic_cb ? s_mic_cb : s_wake_cb;
+     if (cb != NULL && ev->record_buffer != NULL && ev->record_samples > 0) {
+         const int16_t *pcm = ev->record_buffer;
++        /* lisa_audio_record.c reports total interleaved int16 samples, not
++         * per-channel frames (buffer_samples *= channel_count). */
++        size_t samples = ev->record_samples / (s_record_reference ? 2u : 1u);
++        if (!samples) return;
+         if (s_record_reference && s_mic_cb) {
+             /* Hardware L=mic, R=speaker loopback. Cloud capture remains mono. */
+             int16_t mono[BUFFER_SAMPLES];
+-            for (size_t off = 0; off < ev->record_samples; off += BUFFER_SAMPLES) {
+-                size_t n = ev->record_samples - off;
++            for (size_t off = 0; off < samples; off += BUFFER_SAMPLES) {
++                size_t n = samples - off;
+                 if (n > BUFFER_SAMPLES) n = BUFFER_SAMPLES;
+                 for (size_t i = 0; i < n; i++) mono[i] = pcm[2 * (off + i)];
+                 cb(mono, n);
+             }
+-        } else cb(pcm, ev->record_samples);
++        } else cb(pcm, samples);
+     }
+ }
+ 

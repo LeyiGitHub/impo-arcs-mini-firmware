@@ -23,3 +23,13 @@ fi
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/audio_stubs \
   tests/test_mic_ownership.c -o "$output/mic"
 "$output/mic"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -DCONFIG_LISA_AUDIO_RECORD_INDIVIDUAL_GAIN \
+  -Itests/audio_stubs tests/test_mic_ownership.c -o "$output/mic-reference"
+"$output/mic-reference"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$B" -I"$G" \
+  tests/test_wake_policy.c -o "$output/wake-policy"
+"$output/wake-policy"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$J" -Itests/audio_stubs -I"$G" \
+  -Iupstream/arcs/link tests/test_speech_cancel.c "$G/gadget_speech.c" "$G/gadget_pcm.c" \
+  "$J/cJSON.c" -lm -o "$output/speech-cancel"
+"$output/speech-cancel"

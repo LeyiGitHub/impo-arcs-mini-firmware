@@ -13,6 +13,7 @@ static const impo_arcs_mini_product_t product = {
     .model_id = IMPO_MODEL_ID, .product_id = IMPO_PLATFORM_PRODUCT_ID,
     .instructions = IMPO_INSTRUCTIONS,
     .continuous_dialogue = IMPO_CONTINUOUS_DIALOGUE,
+    .wake_interrupt = IMPO_WAKE_INTERRUPT,
     .wake = { .enabled = IMPO_WAKE_ENABLED, .label = IMPO_WAKE_LABEL,
         .keywords = keywords, .keyword_count = IMPO_WAKE_KEYWORD_COUNT,
         .model_file = IMPO_WAKE_MODEL_FILE, .wrap_file = IMPO_WAKE_WRAP_FILE,
@@ -30,6 +31,10 @@ int impo_arcs_mini_say(const char *text)
 {
     if (!text || !*text || strlen(text) > 1000) return -1;
     return gadget_speech_say(text);
+}
+int impo_arcs_mini_interrupt_conversation(void)
+{
+    return product.wake_interrupt && gadget_voice_interrupt() ? 0 : -1;
 }
 int impo_arcs_mini_set_wake_enabled(bool enabled) { return yunbao_wake_set_enabled(enabled); }
 bool impo_arcs_mini_wake_available(void) { return gadget_voice_wakeup_available(); }

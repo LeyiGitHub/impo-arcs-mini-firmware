@@ -9,7 +9,13 @@
 typedef struct { unsigned sample_rate, channels, sample_bits; } test_format_t;
 typedef struct { int analog_gain, digital_gain; } test_gain_t;
 typedef struct { test_format_t format; test_gain_t gain; unsigned buffer_count, buffer_samples; } lisa_audio_play_config_t;
-typedef struct { test_format_t format; test_gain_t gain; bool differential_input, enable_hpf; } lisa_audio_record_config_t;
+typedef struct { test_format_t format;
+#ifdef CONFIG_LISA_AUDIO_RECORD_INDIVIDUAL_GAIN
+test_gain_t gain_l, gain_r;
+#else
+test_gain_t gain;
+#endif
+bool differential_input, enable_hpf; } lisa_audio_record_config_t;
 typedef struct { const void *record_buffer; unsigned record_samples; } lisa_audio_event_t;
 int lisa_audio_play_config(lisa_device_t *, const lisa_audio_play_config_t *);
 int lisa_audio_play_start(lisa_device_t *);

@@ -1,0 +1,299 @@
+diff --git a/arcs/platform/arcs/plat_audio.c b/arcs/platform/arcs/plat_audio.c
+--- a/arcs/platform/arcs/plat_audio.c
++++ b/arcs/platform/arcs/plat_audio.c
+@@ -62,14 +62,24 @@
+ }
+ 
+ static plat_audio_mic_cb_t volatile s_mic_cb, s_wake_cb;
+-static bool s_recording, s_record_stereo;
++static bool s_recording, s_record_stereo, s_record_reference;
+ 
+ static void on_audio(const lisa_audio_event_t *ev, void *user)
+ {
+     (void)user;
+     plat_audio_mic_cb_t cb = s_mic_cb ? s_mic_cb : s_wake_cb;
+     if (cb != NULL && ev->record_buffer != NULL && ev->record_samples > 0) {
+-        cb((const int16_t *)ev->record_buffer, ev->record_samples);
++        const int16_t *pcm = ev->record_buffer;
++        if (s_record_reference && s_mic_cb) {
++            /* Hardware L=mic, R=speaker loopback. Cloud capture remains mono. */
++            int16_t mono[BUFFER_SAMPLES];
++            for (size_t off = 0; off < ev->record_samples; off += BUFFER_SAMPLES) {
++                size_t n = ev->record_samples - off;
++                if (n > BUFFER_SAMPLES) n = BUFFER_SAMPLES;
++                for (size_t i = 0; i < n; i++) mono[i] = pcm[2 * (off + i)];
++                cb(mono, n);
++            }
++        } else cb(pcm, ev->record_samples);
+     }
+ }
+ 
+@@ -80,7 +90,7 @@
+     s_mic_stereo = on;
+ }
+ 
+-static int record_start(void)
++static int record_start(bool reference)
+ {
+     if (s_dev == NULL) {
+         return -ENODEV;
+@@ -88,10 +98,15 @@
+     lisa_audio_record_config_t cfg = {
+         .format = {
+             .sample_rate = LISA_AUDIO_RATE_16K,
+-            .channels = s_mic_stereo ? LISA_AUDIO_CH_STEREO : LISA_AUDIO_CH_LEFT,   /* left: the mic */
++            .channels = s_mic_stereo || reference ? LISA_AUDIO_CH_STEREO : LISA_AUDIO_CH_LEFT,
+             .sample_bits = LISA_AUDIO_BIT_16,
+         },
++#ifdef CONFIG_LISA_AUDIO_RECORD_INDIVIDUAL_GAIN
++        .gain_l = { .analog_gain = MIC_ANALOG_DB, .digital_gain = MIC_DIGITAL_DB },
++        .gain_r = { .analog_gain = reference ? 0 : MIC_ANALOG_DB, .digital_gain = 0 },
++#else
+         .gain = { .analog_gain = MIC_ANALOG_DB, .digital_gain = MIC_DIGITAL_DB },
++#endif
+         .differential_input = true,
+         .enable_hpf = true,
+     };
+@@ -111,7 +126,8 @@
+         return -EIO;
+     }
+     s_recording = true;
+-    s_record_stereo = s_mic_stereo;
++    s_record_stereo = s_mic_stereo || reference;
++    s_record_reference = reference;
+     return 0;
+ }
+ 
+@@ -119,8 +135,9 @@
+ {
+     if (!s_dev || !s_mic_lock || !cb) return -ENODEV;
+     xSemaphoreTake(s_mic_lock, portMAX_DELAY);
+-    int r = s_mic_cb || (s_recording && s_record_stereo != s_mic_stereo) ? -EBUSY : 0;
+-    if (!r && !s_recording) r = record_start();
++    int r = s_mic_cb || (s_record_reference && s_mic_stereo) ||
++        (s_recording && s_record_stereo != s_mic_stereo && !s_record_reference) ? -EBUSY : 0;
++    if (!r && !s_recording) r = record_start(false);
+     if (!r) s_mic_cb = cb;
+     xSemaphoreGive(s_mic_lock);
+     return r;
+@@ -130,6 +147,7 @@
+     if (s_recording && !s_mic_cb && !s_wake_cb) {
+         lisa_audio_record_stop(s_dev);
+         s_recording = false;
++        s_record_reference = false;
+     }
+ }
+ void plat_audio_mic_stop(void)
+@@ -140,16 +158,19 @@
+     stop_unused();
+     xSemaphoreGive(s_mic_lock);
+ }
+-int plat_audio_wake_start(plat_audio_mic_cb_t cb)
++static int wake_start(plat_audio_mic_cb_t cb, bool reference)
+ {
+     if (!s_dev || !s_mic_lock || !cb) return -ENODEV;
+     xSemaphoreTake(s_mic_lock, portMAX_DELAY);
+-    int r = s_wake_cb || s_mic_stereo || (s_recording && s_record_stereo) ? -EBUSY : 0;
+-    if (!r && !s_recording) r = record_start();
++    int r = s_wake_cb || s_mic_stereo ||
++        (s_recording && (s_record_stereo != reference || s_record_reference != reference)) ? -EBUSY : 0;
++    if (!r && !s_recording) r = record_start(reference);
+     if (!r) s_wake_cb = cb;
+     xSemaphoreGive(s_mic_lock);
+     return r;
+ }
++int plat_audio_wake_start(plat_audio_mic_cb_t cb) { return wake_start(cb, false); }
++int plat_audio_wake_reference_start(plat_audio_mic_cb_t cb) { return wake_start(cb, true); }
+ void plat_audio_wake_stop(void)
+ {
+     if (!s_mic_lock) return;
+diff --git a/arcs/platform/arcs/platform_arcs.h b/arcs/platform/arcs/platform_arcs.h
+--- a/arcs/platform/arcs/platform_arcs.h
++++ b/arcs/platform/arcs/platform_arcs.h
+@@ -75,6 +75,9 @@
+ void plat_audio_mic_stop(void);
+ /* Idle-only microphone owner. Voice capture takes exclusive callback priority. */
+ int plat_audio_wake_start(plat_audio_mic_cb_t cb);
++/* Mini2 hardware loopback: interleaved L microphone / R reference, samples is
++ * the number of pairs. Foreground mic capture still receives only L. */
++int plat_audio_wake_reference_start(plat_audio_mic_cb_t cb);
+ void plat_audio_wake_stop(void);
+ void plat_audio_mic_stereo(bool on);   /* debug: interleaved L/R (R carries the speaker reference) */
+ 
+diff --git a/arcs/gadget/gadget_speech.c b/arcs/gadget/gadget_speech.c
+--- a/arcs/gadget/gadget_speech.c
++++ b/arcs/gadget/gadget_speech.c
+@@ -17,6 +17,8 @@
+ #include "lisa_log.h"
+ 
+ #define WRITE_WAIT_MS 5000
++
++static int s_handle = -1;
+ 
+ static struct {
+     uint32_t gen;
+@@ -101,8 +103,7 @@
+ 
+ int gadget_speech_say(const char *text)
+ {
+-    static int handle = -1;
+-    impo_link_stream_cancel(handle);
++    impo_link_stream_cancel(s_handle);
+     cJSON *body = cJSON_CreateObject();
+     cJSON_AddStringToObject(body, "text", text);
+     char *json = cJSON_PrintUnformatted(body);
+@@ -110,7 +111,17 @@
+     if (json == NULL) {
+         return -1;
+     }
+-    handle = impo_link_stream_open("/tts", "application/json", "audio/wav", json, strlen(json), false, &s_sink);
++    s_handle = impo_link_stream_open("/tts", "application/json", "audio/wav", json, strlen(json), false, &s_sink);
+     cJSON_free(json);
+-    return handle >= 0 ? 0 : -1;
++    return s_handle >= 0 ? 0 : -1;
+ }
++
++/* Called by the voice task after a wake interrupt. Stale producers cannot
++ * refill a stopped speaker because its sound generation is invalidated. */
++void gadget_speech_cancel(void)
++{
++    s.failed = true;
++    impo_link_stream_cancel(s_handle);
++    s_handle = -1;
++    gadget_sound_stop();
++}
+diff --git a/arcs/gadget/gadget_speech.h b/arcs/gadget/gadget_speech.h
+--- a/arcs/gadget/gadget_speech.h
++++ b/arcs/gadget/gadget_speech.h
+@@ -7,6 +7,7 @@
+ 
+ /* Starts fetching and playing; returns at once. -1 when not connected. */
+ int gadget_speech_say(const char *text);
++void gadget_speech_cancel(void);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/arcs/gadget/gadget_voice.c b/arcs/gadget/gadget_voice.c
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -59,6 +59,7 @@
+ static volatile bool s_touch;
+ static volatile bool s_continuous, s_session, s_stop, s_wake, s_wakeup_available;
+ static bool s_followup;
++static volatile bool s_interrupt, s_require_parent;
+ static volatile uint32_t s_mic_dropped;
+ static volatile uint32_t s_turns, s_replies_spoken;
+ static char *volatile s_test_text;           /* loopback test: speak this into our own mic */
+@@ -146,7 +147,8 @@
+         return;
+     }
+     bool waiting = s_state == GADGET_VOICE_THINKING || s_state == GADGET_VOICE_SPEAKING;
+-    if (!waiting || !gadget_chat_reply_is_ours(parent, s_acked ? &s_ack : NULL) ||
++    if (!waiting || s_interrupt || (s_require_parent && (!s_acked || !parent[0])) ||
++        !gadget_chat_reply_is_ours(parent, s_acked ? &s_ack : NULL) ||
+         xQueueSend(s_replies, &text, 0) != pdTRUE) {
+         LISA_LOGI(TAG, "reply not for this turn: %.60s", text);
+         free(text);
+@@ -198,7 +200,7 @@
+     impo_link_stream_cancel(s_note);
+     s_note = -1;
+     if (stop_sound) {
+-        gadget_sound_stop();
++        gadget_speech_cancel();
+     }
+     free_replies();
+     s_state = GADGET_VOICE_IDLE;
+@@ -272,7 +274,7 @@
+     const char *why = NULL;
+     while (vr == GADGET_VAD_LISTENING) {
+         have += xStreamBufferReceive(s_mic, (uint8_t *)frame + have, sizeof(frame) - have, pdMS_TO_TICKS(200));
+-        if (s_touch || s_stop) {
++        if (s_touch || s_stop || s_interrupt) {
+             why = "touched";
+             break;
+         }
+@@ -300,7 +302,7 @@
+     LISA_LOGI(TAG, "listened %u ms in %u ms (floor %u, threshold %u), ended by %s; mic dropped %u bytes",
+               (unsigned)vad.t_ms, (unsigned)((uint32_t)plat_uptime_ms() - wall0), (unsigned)vad.floor_min,
+               (unsigned)vad.threshold, why, (unsigned)s_mic_dropped);
+-    if (s_stop || !vad.heard || s_mic_dropped != 0 || strcmp(why, "mic timeout") == 0) {
++    if (s_stop || s_interrupt || !vad.heard || s_mic_dropped != 0 || strcmp(why, "mic timeout") == 0) {
+         end_turn(test_text != NULL);
+         gadget_sound_beep_down();
+         return false;
+@@ -326,7 +328,7 @@
+     }
+     uint64_t upload0 = plat_uptime_ms();
+     for (size_t off = 0; off < recorded;) {
+-        if (s_touch || s_note_failed || plat_uptime_ms() - upload0 >= UPLOAD_WAIT_MS) {
++        if (s_touch || s_interrupt || s_note_failed || plat_uptime_ms() - upload0 >= UPLOAD_WAIT_MS) {
+             LISA_LOGW(TAG, "note upload cancelled: %u/%u bytes queued", (unsigned)off, (unsigned)recorded);
+             end_turn(true);
+             return false;
+@@ -360,7 +362,7 @@
+     char *current = NULL;      /* the reply being spoken, kept for one retry */
+     bool retried = false;
+     for (;;) {
+-        if (s_touch) {
++        if (s_touch || s_interrupt) {
+             free(current);
+             return false;   /* caller handles cancellation */
+         }
+@@ -421,13 +423,15 @@
+     char *test = s_test_text;
+     s_test_text = NULL;
+     s_touch = s_wake = false;
++    bool interrupted = s_interrupt;
++    s_interrupt = false;
+     bool followup = s_followup;
+     s_followup = false;
+     s_session = test == NULL && s_continuous;
+     end_turn(true);
+-    if (followup) vTaskDelay(pdMS_TO_TICKS(300)); /* speaker tail */
++    if (followup || interrupted) vTaskDelay(pdMS_TO_TICKS(300)); /* queued DAC / speaker tail */
+     bool complete = !s_stop && listen(test) && await_replies();
+-    s_followup = test == NULL && s_session && complete && !s_stop;
++    s_followup = test == NULL && s_session && complete && !s_stop && !s_interrupt;
+     if (!s_followup) {
+         end_turn(true);
+         s_session = false;
+@@ -451,9 +455,9 @@
+         }
+         if (s_stop) {
+             end_turn(true);
+-            s_session = s_followup = s_wake = s_touch = s_stop = false;
+-        }
+-        if (s_touch || s_wake || s_followup || s_test_text != NULL) {
++            s_session = s_followup = s_wake = s_touch = s_stop = s_interrupt = false;
++        }
++        if (s_touch || s_wake || s_interrupt || s_followup || s_test_text != NULL) {
+             run_requested_turn();
+             continue;
+         }
+@@ -469,6 +473,14 @@
+ {
+     if (s_session) s_stop = true;
+     s_touch = true;
++}
++bool gadget_voice_interrupt(void)
++{
++    if (impo_link_state() != IMPO_LINK_ONLINE || s_state == GADGET_VOICE_LISTENING || s_stop) return false;
++    s_require_parent = true; /* Do not accept uncorrelated late replies after cancellation. */
++    s_interrupt = true;
++    gadget_sound_stop(); /* Stop locally now; the voice task cancels TTS and starts a fresh turn. */
++    return true;
+ }
+ void gadget_voice_set_continuous(bool enabled) { s_continuous = enabled; }
+ bool gadget_voice_continuous_active(void) { return s_session; }
+diff --git a/arcs/gadget/gadget_voice.h b/arcs/gadget/gadget_voice.h
+--- a/arcs/gadget/gadget_voice.h
++++ b/arcs/gadget/gadget_voice.h
+@@ -22,6 +22,8 @@
+ void gadget_voice_set_continuous(bool enabled);
+ bool gadget_voice_continuous_active(void);
+ void gadget_voice_wake(void);
++/* Task context: stop the old reply and schedule fresh capture, never a click-to-exit. */
++bool gadget_voice_interrupt(void);
+ void gadget_voice_set_wakeup_available(bool available);
+ bool gadget_voice_wakeup_available(void);
+ gadget_voice_state_t gadget_voice_state(void);

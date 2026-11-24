@@ -46,6 +46,16 @@ class ProductTests(unittest.TestCase):
         p=self.load()
         self.assertIn(b'IMPO_WAKE_ENABLED false',generated_files(p)["impo_product_config.h"])
         self.assertNotIn('Say ',p["instructions"])
+    def test_interrupt_opt_in_requires_wake(self):
+        self.assertFalse(self.load()["wake_interrupt"])
+        self.default["wake_interrupt"]=True
+        files=generated_files(self.load())
+        self.assertIn(b'IMPO_WAKE_INTERRUPT true',files['impo_product_config.h'])
+        self.assertIn(b'CONFIG_LISA_AUDIO_RECORD_INDIVIDUAL_GAIN=y',files['product.conf'])
+        self.default["wake"]={"enabled":False}
+        with self.assertRaises(ValueError):self.load()
+        self.default["wake_interrupt"]="yes"
+        with self.assertRaises(ValueError):self.load()
     def test_text_alone_rejected(self):
         self.default["wake"]["label"]="another phrase"
         with self.assertRaises(ValueError):self.load()

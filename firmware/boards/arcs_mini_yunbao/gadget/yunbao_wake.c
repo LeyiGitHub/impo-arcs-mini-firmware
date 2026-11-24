@@ -15,6 +15,7 @@
 #include "gadget_sound.h"
 #include "shell.h"
 #include "yunbao_wake.h"
+#include "yunbao_wake_policy.h"
 #include "impo_arcs_mini.h"
 #define TAG "yunbao_wake"
 #include "lisa_log.h"
@@ -25,18 +26,23 @@ static StreamBufferHandle_t s_audio;
 static QueueHandle_t s_events;
 static volatile bool s_ready, s_enabled=true, s_listening;
 static volatile uint32_t s_frames, s_drops, s_hits;
+static volatile uint32_t s_interrupts, s_ref_frames;
 static volatile int s_error;
 typedef struct { char json[512]; } wake_event_t;
 static bool quiet(void)
 {
     gadget_sound_state_t sound=gadget_sound_state();
-    return s_enabled && gadget_voice_state()==GADGET_VOICE_IDLE &&
-        !gadget_voice_continuous_active() && (sound==GADGET_SOUND_IDLE || sound==GADGET_SOUND_FAILED);
+    return s_enabled && yunbao_wake_can_listen(impo_arcs_mini_product()->wake_interrupt,
+        gadget_voice_state(), gadget_voice_continuous_active(), sound);
 }
 static void idle_mic(const int16_t *pcm, size_t n)
 {
     if (!s_listening || !quiet()) return;
-    size_t bytes=n*sizeof(*pcm), sent=xStreamBufferSend(s_audio,pcm,bytes,0);
+    bool reference=impo_arcs_mini_product()->wake_interrupt;
+    if (reference) {
+        for (size_t i=0;i<n;i++) if (pcm[2*i+1] != 0) { s_ref_frames++; break; }
+    }
+    size_t bytes=n*sizeof(*pcm)*(reference?2:1), sent=xStreamBufferSend(s_audio,pcm,bytes,0);
     if (sent<bytes) s_drops+=(uint32_t)(bytes-sent);
 }
 static void event_cb(uint32_t event, void *data, uint32_t len, void *priv)
@@ -79,7 +85,7 @@ static void wake_task(void *arg)
     (void)arg;
     vTaskDelay(pdMS_TO_TICKS(2000)); /* AP IPC and foreground audio startup */
     int e=engine_init();
-    if (!e) e=plat_audio_wake_start(idle_mic);
+    if (!e) e=impo_arcs_mini_product()->wake_interrupt ? plat_audio_wake_reference_start(idle_mic) : plat_audio_wake_start(idle_mic);
     if (e) {
         s_error=e;
         LISA_LOGE(TAG,"wake unavailable: %d; button voice retained",e);
@@ -90,7 +96,9 @@ static void wake_task(void *arg)
     LISA_LOGI(TAG,"ready: %s, continuous dialogue=%u",impo_arcs_mini_product()->wake.label,(unsigned)impo_arcs_mini_product()->continuous_dialogue);
     uint32_t quiet_at=(uint32_t)plat_uptime_ms();
     bool was_quiet=false, attached=true;
-    int16_t frame[SAMPLES];
+    int16_t frame[SAMPLES*2];
+    bool reference=impo_arcs_mini_product()->wake_interrupt;
+    size_t frame_bytes=SAMPLES*sizeof(int16_t)*(reference?2:1);
     size_t have=0;
     for (;;) {
         /* Always return processed output descriptors to the AP, including during dialogue. */
@@ -101,7 +109,7 @@ static void wake_task(void *arg)
             s_listening=false; plat_audio_wake_stop(); attached=false;
             gadget_voice_set_wakeup_available(false);
         } else if (s_enabled && !attached) {
-            s_error=plat_audio_wake_start(idle_mic);
+            s_error=reference ? plat_audio_wake_reference_start(idle_mic) : plat_audio_wake_start(idle_mic);
             attached=s_error==0;
             gadget_voice_set_wakeup_available(attached);
         }
@@ -119,19 +127,26 @@ static void wake_task(void *arg)
         wake_event_t ev;
         while (xQueueReceive(s_events,&ev,0)==pdTRUE) {
             if (s_listening && quiet() && impo_arcs_wake_result(ev.json,&impo_arcs_mini_product()->wake)) {
+                bool busy=gadget_voice_state()!=GADGET_VOICE_IDLE || gadget_voice_continuous_active() ||
+                    (gadget_sound_state()!=GADGET_SOUND_IDLE && gadget_sound_state()!=GADGET_SOUND_FAILED);
+                if (busy) {
+                    if (impo_arcs_mini_interrupt_conversation()!=0) continue;
+                    s_interrupts++;
+                    LISA_LOGI(TAG,"wake interrupt #%u",(unsigned)s_interrupts);
+                } else gadget_voice_wake();
                 s_hits++; s_listening=false; was_quiet=false;
                 LISA_LOGI(TAG,"wake accepted #%u",(unsigned)s_hits);
-                gadget_voice_wake();
             }
         }
         if (s_listening) {
-            have+=xStreamBufferReceive(s_audio,(uint8_t *)frame+have,sizeof(frame)-have,0);
-            if (have==sizeof(frame)) {
+            have+=xStreamBufferReceive(s_audio,(uint8_t *)frame+have,frame_bytes-have,0);
+            if (have==frame_bytes) {
                 uint32_t capacity; uint16_t desc;
                 acomp_wakeup_audio_in_t *out=acomp_wakeup_stream_tx_buffer_alloc(0,&capacity,&desc);
                 if (out) {
                     if (capacity>=SAMPLES*sizeof(*out)) {
-                        for (unsigned i=0;i<SAMPLES;i++) out[i]=(acomp_wakeup_audio_in_t){.mic0=frame[i],.ref0=0};
+                        for (unsigned i=0;i<SAMPLES;i++) out[i]=(acomp_wakeup_audio_in_t){
+                            .mic0=frame[i*(reference?2:1)],.ref0=reference?frame[2*i+1]:0};
                         e=acomp_wakeup_stream_tx_buffer_submit(0,out,SAMPLES*sizeof(*out),desc);
                         if (e) s_error=e; else s_frames++;
                     } else { s_error=-101; acomp_wakeup_stream_tx_buffer_submit(0,out,0,desc); }
@@ -164,6 +179,8 @@ static int wake_cmd(int argc,char **argv)
     shellPrint(shellGetCurrent(),"wake ready=%u enabled=%u listening=%u frames=%u dropped=%u hits=%u error=%d dialogue=%u word=%s\n",
         (unsigned)s_ready,(unsigned)s_enabled,(unsigned)s_listening,(unsigned)s_frames,(unsigned)s_drops,
         (unsigned)s_hits,s_error,(unsigned)gadget_voice_continuous_active(),impo_arcs_mini_product()->wake.label);
+    shellPrint(shellGetCurrent(),"wake interrupt_enabled=%u interrupts=%u reference_frames=%u\n",
+        (unsigned)impo_arcs_mini_product()->wake_interrupt,(unsigned)s_interrupts,(unsigned)s_ref_frames);
     return 0;
 }
 SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0)|SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN)|SHELL_CMD_DISABLE_RETURN,
