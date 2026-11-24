@@ -100,7 +100,8 @@ python3 tools/build.py --docker \
 ## 语音上传与阶段查询
 
 优化属于公共 SDK：产品选择策略，应用不复制采集、Link、Noise、WAV/Base64 或
-TTS 主流程。默认 `batch` 在收音结束后上传；显式选择 `overlap` 后，在确认语音时
+TTS 主流程。较长输入复测曾出现 ACK 后无完整回复及设备重启，尚未通过稳定性门槛；
+`overlap` 仅作为显式实验选项。默认 `batch` 在收音结束后上传；显式选择 `overlap` 后，在确认语音时
 开始同一笔上传。两种模式都保留完整 PSRAM 录音和有界取消；未知结果不自动重发。
 当前官方网关的兼容检查和收益见 [实测记录](VOICE_LATENCY_VALIDATION.md)，不能
 自动推广到其他网关或设备。`/tts`、音色和播放缓冲策略未改。
@@ -199,7 +200,7 @@ python3 tools/package_sdk.py --output /path/to/output
 
 自定义应用须将命令/事件的静态 C 表通过 `--commands FILE:TABLE`、`--events FILE:TABLE` 加入产品清单；可重复传入多个表。工具不能推断任意 C 程序动态生成的描述。默认固件已提供的命令由官方表生成，不能重复注册同名命令。
 
-GitHub Actions 的 `sdk-source` 任务也会生成同一源码包及摘要清单，下载入口位于对应提交的 Actions 运行。
+GitHub Actions 启用时，`sdk-source` 任务也会生成同一源码包及摘要清单，下载入口位于对应提交的 Actions 运行。
 
 打包要求所有 SDK 更改已提交，仅导出 Git 跟踪源码，附版本、提交、依赖固定及源码摘要。ListenAI SDK、模型、AP、boot、生成固件、日志和凭据均不包含。刷写仍按 [分区核验流程](FLASHING.md) 进行。
 

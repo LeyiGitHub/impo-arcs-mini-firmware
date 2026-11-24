@@ -74,6 +74,6 @@ python3 tests/test_voice_bench_schedule.py
 或异常正文。分享前仍核对公开文件。现有 [60轮短问数据](data/voice-latency-20261124-short-60.json)
 保留全部尝试和唯一失败，分位数仅来自成功且声学有效的样本。
 
-GitHub 的 `Host checks / sdk-source` 任务为每个提交生成固定源码 ZIP 和摘要清单，
+GitHub Actions 启用时，`Host checks / sdk-source` 任务为每个提交生成固定源码 ZIP 和摘要清单，
 可从该提交的 Actions 运行下载 `impo-arcs-mini-sdk-source`。源码包本身不包含
 ListenAI SDK、固件镜像、模型、现场录音或配对凭据。SDK 使用与硬件验收分别记录。

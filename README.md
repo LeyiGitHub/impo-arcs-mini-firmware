@@ -37,8 +37,9 @@ python3 tools/build.py --docker \
 - 2026-11-24 语音优化：公共 SDK 已支持独立采集/上传、回合关联、取消及阶段查询。
   同一 Mini2 镜像中 batch/overlap 各30次固定短问，成功声学样本 P50 为
   13.878 / 11.819 秒，约减少14.8%；失败数分别0/30和1/30，未重试失败问题。
-  本机启用 overlap / 1200 ms 和“小周小周”，重启及真实声学唤醒问答通过；
-  尚未达到6秒目标或完成长期稳定性验收。详见 [完整数据与边界](docs/VOICE_LATENCY_VALIDATION.md)。
+  本轮再测8次短问仍有同方向收益；较长输入出现 ACK 后无完整回复及设备重启，
+  本机恢复 batch / 1200 ms，保留“小周小周”。overlap 仅为显式实验选项，
+  尚未达到6秒目标或完成稳定性验收。详见 [完整数据与边界](docs/VOICE_LATENCY_VALIDATION.md)。
   最小接入见 [voice_companion](examples/voice_companion/README.md)。
 
 

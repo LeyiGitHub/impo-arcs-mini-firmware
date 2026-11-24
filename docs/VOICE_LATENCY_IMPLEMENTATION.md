@@ -20,7 +20,7 @@ SDK 通用缺省保持 `batch`、1200 ms，完整文字及原有播放缓冲。�
 "voice": {"upload_mode": "overlap", "endpoint_pause_ms": 1200}
 ```
 
-`products/arcs-mini2-latency-batch.json` 和 `products/arcs-mini2-latency-overlap.json` 使用相同的“小周小周”单麦克风唤醒资源，仅上传模式不同。资源从本地历史设备备份提取；其原 AP 分区与目标 Mini2 保留的 AP 逐字节一致，模型和 wrap 摘要写入 `resources/wake/xiaozhou-preserved.json`。构建仍校验资源，不能仅改标签替代声学模型。模型二进制不随仓库分发；实机资源安装、声音触发和在线结果见验证记录。本机当前部署 `overlap`、1200 ms，重启保留该模式和“小周小周”；独立 `batch` 产品用于回退。
+`products/arcs-mini2-latency-batch.json` 和 `products/arcs-mini2-latency-overlap.json` 使用相同的“小周小周”单麦克风唤醒资源，仅上传模式不同。资源从本地历史设备备份提取；其原 AP 分区与目标 Mini2 保留的 AP 逐字节一致，模型和 wrap 摘要写入 `resources/wake/xiaozhou-preserved.json`。构建仍校验资源，不能仅改标签替代声学模型。模型二进制不随仓库分发；实机资源安装、声音触发和在线结果见验证记录。上一轮部署 `overlap`、1200 ms 并通过重启短测；本轮较长输入回归失败后恢复普通 `batch`、1200 ms 产品。“小周小周”资源保留，`overlap` 继续作为显式实验选项。
 
 构建元数据 `impo-sdk-build.json` 记录语音配置。应用可调用 `impo_arcs_mini_configure_voice()`、`impo_arcs_mini_voice_snapshot()`；配置只在空闲且连续会话已结束时接受。运行时配置不持久化，重启恢复产品默认值。
 

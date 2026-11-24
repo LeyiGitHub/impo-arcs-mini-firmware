@@ -16,6 +16,16 @@ answer signal. The metric is an automated acoustic proxy, not human listening.
   original 20% volume without another reboot. These operational events limit any
   stability claim even though the eight question turns passed.
 
+- `voice-latency-20261124-medium-stopped-3.json`: the 6.321-second fixed
+  arithmetic question, planned four pairs. One batch turn passed. The first
+  overlap turn queued the full body and received ACK, but timed out after
+  120 seconds without a complete reply. The next planned overlap turn lost USB
+  and rebooted; its result is unknown. Testing stopped and no question was
+  retried. Five remaining medium slots and all eight planned pause900 slots
+  were not attempted. No overlap percentile or long-input improvement can be
+  claimed. The exporter conservatively includes the unknown result in the
+  non-success count; it is not a proven gateway rejection.
+
 All tests use the exact ordinary 0.1.8 Mini2 image identified in the JSON metadata;
 no diagnostic subscription is included. Runtime mode switches compare the same
 image, not the original unoptimized commit against a new binary. Test volumes are
