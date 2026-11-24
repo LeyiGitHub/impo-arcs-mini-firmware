@@ -53,6 +53,12 @@ int main(int argc, char **argv)
         memcpy(previous, p, sizeof(previous));
         preview(argc > 1 ? argv[1] : NULL, samples[i].name, p);
     }
+    for (unsigned phase = IMPO_VOICE_UPLOADING; phase <= IMPO_VOICE_FAILED; phase++) {
+        assert(yunbao_screen_render_voice(p,240,240,GADGET_STATUS_THINKING,1000,false,true,false,(impo_arcs_voice_phase_t)phase));
+        guards();
+        char name[32]; snprintf(name,sizeof(name),"voice-%u",phase);
+        preview(argc > 1 ? argv[1] : NULL,name,p);
+    }
     assert(yunbao_screen_render(p, 240, 240, (gadget_status_t)999, 0, true, true, false)); guards();
     assert(p[100*240+30] == 0xf800 && p[100*240+90] == 0x07e0);
     assert(p[100*240+150] == 0x001f && p[100*240+210] == 0xffff);

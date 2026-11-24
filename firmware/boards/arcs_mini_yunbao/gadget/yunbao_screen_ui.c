@@ -59,8 +59,9 @@ static void text(uint16_t *p, const char *str, int y, uint16_t color)
     }
 }
 
-bool yunbao_screen_render(uint16_t *p, unsigned width, unsigned height,
-                          gadget_status_t state, uint32_t ms, bool test, bool wake_available, bool dialogue_active)
+bool yunbao_screen_render_voice(uint16_t *p, unsigned width, unsigned height,
+    gadget_status_t state, uint32_t ms, bool test, bool wake_available, bool dialogue_active,
+    impo_arcs_voice_phase_t voice_phase)
 {
     if (!p || width != YUNBAO_SCREEN_WIDTH || height != YUNBAO_SCREEN_HEIGHT) return false;
     for (unsigned i = 0; i < width*height; i++) p[i] = BG;
@@ -103,8 +104,26 @@ bool yunbao_screen_render(uint16_t *p, unsigned width, unsigned height,
     } else {
         rect(p, 106, 149, 28, 3, accent); rect(p, 101, 144, 4, 5, accent); rect(p, 135, 144, 4, 5, accent);
     }
-    text(p, labels[st], 169, WHITE);
+    const char *label = labels[st];
+    if (state == GADGET_STATUS_IDLE || state == GADGET_STATUS_THINKING || state == GADGET_STATUS_SPEAKING) {
+        switch (voice_phase) {
+        case IMPO_VOICE_UPLOADING: label = "正在上传"; break;
+        case IMPO_VOICE_WAITING: label = "等待回复"; break;
+        case IMPO_VOICE_PREPARING: label = "准备语音"; break;
+        case IMPO_VOICE_PLAYING: label = "正在回答"; break;
+        case IMPO_VOICE_CANCELLING: label = "取消中"; break;
+        case IMPO_VOICE_FAILED: label = "语音失败"; break;
+        default: break;
+        }
+    }
+    text(p, label, 169, WHITE);
     rect(p, 48, 202, 144, 1, RGB(32,52,66));
     text(p, dialogue_active ? "短按结束" : wake_available ? IMPO_WAKE_LABEL : "短按说话", 210, MUTED);
     return true;
+}
+bool yunbao_screen_render(uint16_t *p, unsigned width, unsigned height,
+    gadget_status_t state, uint32_t ms, bool test, bool wake_available, bool dialogue_active)
+{
+    return yunbao_screen_render_voice(p, width, height, state, ms, test, wake_available,
+                                     dialogue_active, IMPO_VOICE_IDLE);
 }

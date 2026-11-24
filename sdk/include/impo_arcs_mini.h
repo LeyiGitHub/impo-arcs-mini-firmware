@@ -2,6 +2,7 @@
 #pragma once
 #include "gadget_board.h" /* Official command, event and status contracts. */
 #include "impo_arcs_wake.h"
+#include "impo_arcs_voice.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,6 +13,7 @@ extern "C" {
 typedef struct {
     const char *id, *display_name, *model_id, *product_id, *instructions;
     bool continuous_dialogue, wake_interrupt;
+    impo_arcs_voice_config_t voice;
     impo_arcs_wake_config_t wake;
 } impo_arcs_mini_product_t;
 

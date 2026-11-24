@@ -5,3 +5,5 @@ int xTaskCreate(void (*fn)(void *), const char *, unsigned, void *, unsigned, Ta
 void vTaskDelay(unsigned ms);
 
 void vTaskDelete(TaskHandle_t task);
+
+unsigned uxTaskGetStackHighWaterMark(TaskHandle_t task);

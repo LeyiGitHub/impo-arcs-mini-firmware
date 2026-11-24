@@ -56,7 +56,7 @@ for attempt in range(2):
     break
 check(sdk / "arcs" / build_dir, wake_enabled=profile["wake"]["enabled"], arcs_sdk_version=a.arcs_sdk_version)
 firmware = sdk / "arcs" / build_dir / "impo-gadget.bin"
-metadata = {"product": profile["id"], "listenai_sdk_version": a.arcs_sdk_version,
+metadata = {"product": profile["id"], "voice": profile["voice"], "listenai_sdk_version": a.arcs_sdk_version,
             "image_bytes": firmware.stat().st_size, "image_sha256": hashlib.sha256(firmware.read_bytes()).hexdigest(),
             "wake_bundle": profile["wake"]["id"], "retained_ap_required": True}
 (firmware.parent / "impo-sdk-build.json").write_text(json.dumps(metadata, indent=2) + "\n")

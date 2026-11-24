@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "arcs-mini2-latency-overlap",
+  "display_name": "Arcs Mini 2",
+  "model_id": "arcs-mini2",
+  "node_prefix": "arcsmini2",
+  "continuous_dialogue": true,
+  "wake_interrupt": true,
+  "china_relay": true,
+  "voice": {
+    "upload_mode": "overlap",
+    "endpoint_pause_ms": 1200
+  },
+  "wake": {
+    "enabled": true,
+    "bundle": "../resources/wake/xiaoling-preserved.json"
+  }
+}

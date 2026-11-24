@@ -35,8 +35,8 @@ bool impo_arcs_wake_resources(const uint8_t *fs, size_t capacity, const impo_arc
         }
         off=next&~15u;
     }
-    if (off || r.model_size<16 || r.wrap_size<2 || r.wrap_size>4096 ||
-        memcmp(fs+r.model_offset,"ALOG_RES_HV10001",15)) return false;
+    if (off || r.model_size<17 || r.wrap_size<2 || r.wrap_size>4096 ||
+        memcmp(fs+r.model_offset,"ALOG_RES_HV100001",17)) return false;
     uint8_t digest[32];
     if (mbedtls_sha256_ret(fs+r.model_offset,r.model_size,digest,0) ||
         memcmp(digest,config->model_sha256,sizeof(digest)) ||

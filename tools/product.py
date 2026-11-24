@@ -35,7 +35,7 @@ def load_product(path=DEFAULT_PRODUCT):
     path = Path(path).resolve()
     p = json.loads(path.read_text())
     object_keys(p, ["schema_version", "id", "display_name", "screen_title", "model_id", "node_prefix",
-                    "product_id", "continuous_dialogue", "wake_interrupt", "china_relay", "instructions", "wake"], "product")
+                    "product_id", "continuous_dialogue", "wake_interrupt", "china_relay", "instructions", "wake", "voice"], "product")
     if p.get("schema_version") != 1:
         raise ValueError("Unsupported product schema_version")
     for key in ["id", "model_id", "node_prefix"]:
@@ -48,6 +48,15 @@ def load_product(path=DEFAULT_PRODUCT):
     p["product_id"] = p.get("product_id")
     for key in ["continuous_dialogue", "china_relay", "wake_interrupt"]:
         p[key] = boolean(p.get(key, key != "wake_interrupt"), key)
+    voice = p.get("voice", {})
+    object_keys(voice, ["upload_mode", "endpoint_pause_ms"], "voice")
+    mode = voice.get("upload_mode", "batch")
+    pause = voice.get("endpoint_pause_ms", 1200)
+    if mode not in ("batch", "overlap"):
+        raise ValueError("voice.upload_mode: expected batch or overlap")
+    if type(pause) is not int or not 600 <= pause <= 2000:
+        raise ValueError("voice.endpoint_pause_ms: expected 600..2000 integer milliseconds")
+    p["voice"] = {"upload_mode": mode, "endpoint_pause_ms": pause}
     w = p.get("wake", {})
     object_keys(w, ["enabled", "bundle"], "wake")
     enabled = boolean(w.get("enabled", False), "wake.enabled")
@@ -104,6 +113,8 @@ def generated_files(p, font=None):
               "IMPO_SCREEN_TITLE": q(p["screen_title"]), "IMPO_INSTRUCTIONS": q(p["instructions"]),
               "IMPO_CONTINUOUS_DIALOGUE": str(p["continuous_dialogue"]).lower(),
               "IMPO_WAKE_INTERRUPT": str(p["wake_interrupt"]).lower(),
+              "IMPO_VOICE_UPLOAD_OVERLAP": str(p["voice"]["upload_mode"] == "overlap").lower(),
+              "IMPO_VOICE_ENDPOINT_PAUSE_MS": str(p["voice"]["endpoint_pause_ms"]),
               "IMPO_WAKE_ENABLED": str(w["enabled"]).lower(), "IMPO_WAKE_LABEL": q(w["label"]),
               "IMPO_WAKE_KEYWORDS": "{" + ",".join(map(q, w["keywords"])) + "}" if w["keywords"] else "{NULL}",
               "IMPO_WAKE_KEYWORD_COUNT": str(len(w["keywords"]))}
@@ -119,7 +130,7 @@ def generated_files(p, font=None):
     if p["wake_interrupt"]:
         config += "CONFIG_LISA_AUDIO_RECORD_INDIVIDUAL_GAIN=y\n"
     glyphs = (ROOT / "sdk/assets/status_font.h").read_text()
-    need = set(p["screen_title"] + w["label"])
+    need = set("正在上传等待回复准备语音取消失败" + p["screen_title"] + w["label"])
     have = {chr(int(cp,16)) for cp in re.findall(r"\{0x([0-9a-fA-F]+),", glyphs)}
     if not need <= have:
         if not font:

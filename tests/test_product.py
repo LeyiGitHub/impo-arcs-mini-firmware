@@ -41,6 +41,25 @@ class ProductTests(unittest.TestCase):
         h=generated_files(p)["impo_product_config.h"].decode()
         self.assertIn('#define IMPO_WAKE_KEYWORDS {"hello mini"}',h)
         self.assertNotIn('ni3 hao3 yun2 bao3',h)
+    def test_mini2_latency_profiles(self):
+        p=load_product(DEFAULT_PRODUCT.parent / 'arcs-mini2-latency-batch.json')
+        self.assertEqual(p['wake']['label'], '小聆小聆')
+        self.assertEqual(p['wake']['keywords'], ['xiao3 ling2 xiao3 ling2', '小聆小聆'])
+        overlap=load_product(DEFAULT_PRODUCT.parent / 'arcs-mini2-latency-overlap.json')
+        self.assertEqual(p['wake'], overlap['wake'])
+        self.assertEqual(p['voice']['upload_mode'], 'batch')
+        self.assertEqual(overlap['voice']['upload_mode'], 'overlap')
+    def test_voice_defaults_and_validation(self):
+        self.assertEqual(self.load()["voice"], {"upload_mode":"batch", "endpoint_pause_ms":1200})
+        self.default["voice"] = {"upload_mode":"overlap", "endpoint_pause_ms":800}
+        files=generated_files(self.load())
+        self.assertIn(b'IMPO_VOICE_UPLOAD_OVERLAP true', files['impo_product_config.h'])
+        self.assertIn(b'IMPO_VOICE_ENDPOINT_PAUSE_MS 800', files['impo_product_config.h'])
+        for value in [{"upload_mode":"stream"},{"endpoint_pause_ms":True},
+                      {"endpoint_pause_ms":599},{"endpoint_pause_ms":2001},
+                      {"reply_mode":"sentence"}]:
+            self.default["voice"]=value
+            with self.assertRaises(ValueError): self.load()
     def test_disabled_needs_no_resources(self):
         self.default["wake"]={"enabled":False}
         p=self.load()
@@ -78,16 +97,18 @@ class ProductTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"--font"):generated_files(self.load())
     def test_resource_descriptor_from_bytes(self):
         model=self.root/"mini.bin"; wrap=self.root/"mini.json"
-        model.write_bytes(b"ALOG_RES_HV10001\0synthetic-test-fixture")
+        model.write_bytes(b"ALOG_RES_HV100001\0synthetic-test-fixture")
         wrap.write_text('{"cae":{"chns":{"mic":1,"ref":1}}}')
         b=describe("mini-test","Hello Mini",["hello mini"],model,wrap)
         self.assertEqual(b["model"]["sha256"],hashlib.sha256(model.read_bytes()).hexdigest())
         self.assertEqual(self.load(bundle=b)["wake"]["keywords"],["hello mini"])
+        model.write_bytes(b"ALOG_RES_HV10001\0incorrect-header")
+        with self.assertRaises(ValueError):describe("id","Hello Mini",["hello mini"],model,wrap)
         model.write_text("a phrase is not an acoustic model")
         with self.assertRaises(ValueError):describe("id","Hello Mini",["hello mini"],model,wrap)
     def test_resource_descriptor_rejects_wrong_channels(self):
         model=self.root/"mini.bin";wrap=self.root/"mini.json"
-        model.write_bytes(b"ALOG_RES_HV10001\0fixture")
+        model.write_bytes(b"ALOG_RES_HV100001\0fixture")
         wrap.write_text('{"cae":{"chns":{"mic":2,"ref":1}}}')
         with self.assertRaises(ValueError):describe("id","Hello Mini",["hello mini"],model,wrap)
     def test_archive_integrity(self):

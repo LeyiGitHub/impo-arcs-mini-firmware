@@ -8,7 +8,7 @@ from pathlib import Path
 def describe(bundle_id, label, keywords, model, wrap):
     model, wrap = Path(model), Path(wrap)
     data = model.read_bytes()
-    if len(data) < 16 or not data.startswith(b"ALOG_RES_HV10001"):
+    if len(data) < 17 or not data.startswith(b"ALOG_RES_HV100001"):
         raise ValueError("Expected an ACOMP-compatible acoustic model, not a keyword text file")
     raw = wrap.read_bytes()
     if not 2 <= len(raw) <= 4096:

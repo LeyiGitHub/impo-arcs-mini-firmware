@@ -13,11 +13,11 @@ static void make(void)
 {
     memset(fs,0,sizeof(fs)); memcpy(fs,"-rom1fs-",8); put(8,sizeof(fs));
     put(32,1); put(36,64); /* root */
-    put(64,128|2); put(72,16); strcpy((char *)fs+80,"cae_esr.bin");
-    memcpy(fs+96,"ALOG_RES_HV10001",15);
+    put(64,128|2); put(72,32); strcpy((char *)fs+80,"cae_esr.bin");
+    memcpy(fs+96,"ALOG_RES_HV100001",17);
     put(128,2); const char *wrap="{\"cae\":{\"chns\":{\"mic\":1,\"ref\":1}}}";
     put(136,strlen(wrap)); strcpy((char *)fs+144,"wrap.json"); memcpy(fs+160,wrap,strlen(wrap));
-    assert(!mbedtls_sha256_ret(fs+96,16,cfg.model_sha256,0));
+    assert(!mbedtls_sha256_ret(fs+96,32,cfg.model_sha256,0));
     assert(!mbedtls_sha256_ret(fs+160,strlen(wrap),cfg.wrap_sha256,0));
 }
 int main(int argc,char **argv)

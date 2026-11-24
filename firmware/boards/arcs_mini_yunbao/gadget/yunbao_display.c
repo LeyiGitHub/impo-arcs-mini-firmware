@@ -59,22 +59,26 @@ static void display_task(void *arg)
     lisa_display_buffer_desc_t desc = { .width = YUNBAO_SCREEN_WIDTH, .height = YUNBAO_SCREEN_HEIGHT,
         .pitch = YUNBAO_SCREEN_WIDTH, .buf_size = YUNBAO_SCREEN_WIDTH*YUNBAO_SCREEN_HEIGHT*2 };
     int previous = -1;
+    int previous_voice = -1;
     uint32_t previous_phase = UINT32_MAX;
     bool previous_test = false, previous_wake = false, previous_dialogue = false;
     for (;;) {
         uint32_t now = (uint32_t)plat_uptime_ms();
         if (s_color_test && now-s_test_at >= 15000) s_color_test = false;
         gadget_status_t state = s_requested;
+        impo_arcs_voice_snapshot_t voice;
+        gadget_voice_snapshot(&voice);
         bool animated = state == GADGET_STATUS_LISTENING || state == GADGET_STATUS_THINKING ||
                         state == GADGET_STATUS_SPEAKING || state == GADGET_STATUS_CONNECTING;
         uint32_t phase = animated ? now/400 : now%5000 >= 4800;
         bool test = s_color_test, wake = gadget_voice_wakeup_available(), dialogue = gadget_voice_continuous_active();
-        if (previous != (int)state || previous_phase != phase || previous_test != test || previous_wake != wake || previous_dialogue != dialogue) {
-            yunbao_screen_render(pixels, caps.width, caps.height, state, now, test, wake, dialogue);
+        if (previous != (int)state || previous_voice != (int)voice.phase || previous_phase != phase || previous_test != test || previous_wake != wake || previous_dialogue != dialogue) {
+            yunbao_screen_render_voice(pixels, caps.width, caps.height, state, now, test, wake, dialogue, voice.phase);
             r = lisa_display_write(dev, 0, 0, &desc, pixels);
             if (r) { s_error = r; LISA_LOGE(TAG, "frame write failed: %d", r); }
             else { s_error = 0; s_frames++; }
             previous = state; previous_phase = phase; previous_test = test; previous_wake = wake; previous_dialogue = dialogue;
+            previous_voice = voice.phase;
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }

@@ -11,6 +11,8 @@ static bool continuous, available;
 static int starts, speech_calls;
 static bool interrupt_result;
 bool gadget_voice_interrupt(void) { return interrupt_result; }
+int gadget_voice_configure(const impo_arcs_voice_config_t *c) { return c ? 0 : -1; }
+void gadget_voice_snapshot(impo_arcs_voice_snapshot_t *out) { if (out) memset(out,0,sizeof(*out)); }
 impo_link_state_t impo_link_state(void) { return link_state; }
 gadget_voice_state_t gadget_voice_state(void) { return voice_state; }
 bool gadget_voice_continuous_active(void) { return continuous; }

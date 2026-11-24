@@ -1,0 +1,1012 @@
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -10,6 +10,7 @@
+  * which hand replies to the voice task through a queue.
+  */
+ #include <stdbool.h>
++#include <stdatomic.h>
+ #include <stdint.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -17,6 +18,7 @@
+ 
+ #include "FreeRTOS.h"
+ #include "queue.h"
++#include "semphr.h"
+ #include "stream_buffer.h"
+ #include "task.h"
+ 
+@@ -55,155 +57,293 @@
+ static TaskHandle_t s_task;
+ static StreamBufferHandle_t s_mic;
+ static QueueHandle_t s_replies;              /* char *, from the link task */
+-static volatile gadget_voice_state_t s_state = GADGET_VOICE_IDLE;
+-static volatile bool s_touch;
+-static volatile bool s_continuous, s_session, s_stop, s_wake, s_wakeup_available;
++static _Atomic gadget_voice_state_t s_state = GADGET_VOICE_IDLE;
++static _Atomic bool s_touch;
++static _Atomic bool s_continuous, s_session, s_stop, s_wake, s_wakeup_available;
+ static bool s_followup;
+-static volatile bool s_interrupt, s_require_parent;
+-static volatile uint32_t s_mic_dropped;
+-static volatile uint32_t s_turns, s_replies_spoken;
+-static char *volatile s_test_text;           /* loopback test: speak this into our own mic */
+-
+-/* /chat/stream: the ack (link task writes, voice task reads once acked) */
++static _Atomic bool s_interrupt;
++static _Atomic uint32_t s_mic_dropped;
++static _Atomic uint32_t s_turns, s_replies_spoken;
++static _Atomic(char *) s_test_text;           /* loopback test: speak this into our own mic */
++
++/* Published recording positions, request ownership and diagnostics are protected
++ * by s_lock. Never hold it across a network wait or audio operation. The note
++ * is append-only until the uploader has relinquished it. */
++static SemaphoreHandle_t s_lock;
++static impo_arcs_voice_config_t s_config = { false, 1200 };
++static impo_arcs_voice_snapshot_t s_stats;
++static uint8_t *s_recording;
++static char *s_encoded, *s_ack_buf;
++static size_t s_published, s_uploaded, s_ack_len, s_reply_bytes;
++static bool s_sealed, s_final_sending, s_heard, s_active, s_finished, s_upload_pending, s_upload_running;
++static bool s_queued, s_note_done, s_acked;
++static _Atomic bool s_note_failed;
+ static gadget_chat_ack_t s_ack;
+-static volatile bool s_acked;
+-static volatile bool s_note_failed;
+-static char *s_ack_buf;
+-static size_t s_ack_len;
+-static int s_note_status;
+-static int s_note = -1;
+-
+-/* /chat/subscribe */
+-static volatile bool s_sub_open;
++static int s_note_status, s_note = -1;
++static uint32_t s_epoch, s_session_epoch;
++static _Atomic bool s_sub_open;
+ static gadget_lines_t s_lines;
+ static gadget_chat_t s_chat;
+ 
+-/* ---- mic ---- */
+-
++typedef struct {
++    char *text;
++    char parent[GADGET_CHAT_ID_MAX];
++    uint32_t epoch, session_epoch;
++    uint64_t received_ms;
++} reply_t;
++
++static void mark_locked(impo_arcs_voice_stage_t stage)
++{
++    uint32_t bit = 1u << stage;
++    if (!(s_stats.valid_stages & bit)) {
++        s_stats.stage_ms[stage] = plat_uptime_ms();
++        s_stats.valid_stages |= bit;
++    }
++}
++static bool live_locked(uint32_t epoch)
++{
++    return s_active && s_epoch == epoch && s_stats.session_epoch == s_session_epoch;
++}
++static void fail_locked(void)
++{
++    s_note_failed = true;
++    s_stats.failed = true;
++    s_stats.phase = IMPO_VOICE_FAILED;
++}
++
++/* ---- mic: no encoding, logging or networking in this callback ---- */
+ static void mic_cb(const int16_t *pcm, size_t n)
+ {
+     size_t want = n * sizeof(int16_t);
+     size_t sent = xStreamBufferSend(s_mic, pcm, want, 0);
+-    if (sent < want) {
+-        s_mic_dropped += (uint32_t)(want - sent);
+-    }
+-}
+-
+-/* ---- /chat/stream sink ---- */
+-
+-static void note_begin(void)
+-{
+-    s_note_failed = false;
+-    s_ack_len = 0;
+-    s_note_status = 0;
+-    s_acked = false;
+-}
+-
+-static void note_status(int status)
+-{
+-    s_note_status = status;
+-}
+-
+-static void note_data(const unsigned char *d, size_t len)
+-{
+-    if (s_ack_buf == NULL) {
+-        s_ack_buf = malloc(LINE_MAX);
+-    }
+-    if (s_ack_buf != NULL && s_ack_len + len < LINE_MAX) {
+-        memcpy(s_ack_buf + s_ack_len, d, len);
+-        s_ack_len += len;
+-    }
+-}
+-
+-static void note_end(const char *error)
+-{
+-    if (s_ack_buf != NULL) {
+-        s_ack_buf[s_ack_len] = '\0';
+-    }
+-    if (error != NULL || s_note_status != 200 || s_ack_buf == NULL) {
+-        LISA_LOGW(TAG, "voice note failed: %d %s %.200s", s_note_status, error ? error : "",
+-                  s_ack_buf ? s_ack_buf : "");
+-        s_note_failed = true;
+-        return;
+-    }
+-    gadget_chat_ack_t ack;
+-    if (gadget_chat_parse_ack(s_ack_buf, &ack)) {
+-        s_ack = ack;
+-        s_acked = true;
+-    }
+-    LISA_LOGI(TAG, "voice note sent: message %s", s_acked ? s_ack.message_id : "?");
+-}
+-
+-static const impo_link_stream_sink_t s_note_sink = { note_begin, note_status, note_data, note_end };
+-
+-/* ---- /chat/subscribe sink ---- */
+-
++    if (sent < want) s_mic_dropped += (uint32_t)(want - sent);
++}
++
++/* ---- upload callbacks: epoch remains meaningful after cancellation ---- */
++static void note_status(void *ctx, int status)
++{
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (live_locked((uint32_t)(uintptr_t)ctx)) s_note_status = status;
++    xSemaphoreGive(s_lock);
++}
++static void note_data(void *ctx, const unsigned char *d, size_t len)
++{
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (live_locked((uint32_t)(uintptr_t)ctx)) {
++        if (s_ack_len + len < 4096) {
++            memcpy(s_ack_buf + s_ack_len, d, len);
++            s_ack_len += len;
++        } else fail_locked();
++    }
++    xSemaphoreGive(s_lock);
++}
++static void note_end(void *ctx, const char *error)
++{
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (live_locked((uint32_t)(uintptr_t)ctx)) {
++        s_note_done = true;
++        s_note = -1;
++        s_ack_buf[s_ack_len] = 0;
++        if (error || !s_sealed || !s_final_sending || s_note_status != 200 || s_note_failed ||
++            !gadget_chat_parse_ack(s_ack_buf, &s_ack)) fail_locked();
++        else {
++            s_acked = true;
++            mark_locked(IMPO_VOICE_SERVER_ACK);
++            if (s_stats.phase == IMPO_VOICE_UPLOADING) s_stats.phase = IMPO_VOICE_WAITING;
++        }
++    }
++    xSemaphoreGive(s_lock);
++}
++static const impo_link_stream_sink_ctx_t s_note_sink = { NULL, note_status, note_data, note_end };
++
++/* ---- subscription: buffer bounded, parent-tagged replies before ACK ---- */
+ static void on_line(void *ctx, char *line)
+ {
+     (void)ctx;
+-    char parent[GADGET_CHAT_ID_MAX];
+-    char *text = gadget_chat_feed(&s_chat, line, parent);
+-    if (text == NULL) {
+-        return;
+-    }
+-    bool waiting = s_state == GADGET_VOICE_THINKING || s_state == GADGET_VOICE_SPEAKING;
+-    if (!waiting || s_interrupt || (s_require_parent && (!s_acked || !parent[0])) ||
+-        !gadget_chat_reply_is_ours(parent, s_acked ? &s_ack : NULL) ||
+-        xQueueSend(s_replies, &text, 0) != pdTRUE) {
+-        LISA_LOGI(TAG, "reply not for this turn: %.60s", text);
+-        free(text);
+-    }
+-}
+-
++    reply_t reply = {0};
++    reply.text = gadget_chat_feed(&s_chat, line, reply.parent);
++    if (!reply.text) return;
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    bool accept = s_active && !s_interrupt && !s_note_failed && reply.parent[0] &&
++        s_stats.session_epoch == s_session_epoch &&
++        (!s_acked || gadget_chat_reply_is_ours(reply.parent, &s_ack));
++    reply.epoch = s_epoch;
++    reply.session_epoch = s_session_epoch;
++    reply.received_ms = plat_uptime_ms();
++    size_t bytes = strlen(reply.text) + 1;
++    if (accept && (bytes > LINE_MAX - s_reply_bytes || xQueueSend(s_replies, &reply, 0) != pdTRUE)) {
++        fail_locked(); /* do not silently truncate an answer on queue exhaustion */
++        accept = false;
++    }
++    if (accept) s_reply_bytes += bytes;
++    xSemaphoreGive(s_lock);
++    if (!accept) free(reply.text);
++}
+ static void sub_begin(void)
+ {
+     static char *buf;
+-    if (buf == NULL) {
+-        buf = malloc(LINE_MAX);
+-    }
++    if (!buf) buf = malloc(LINE_MAX);
+     gadget_lines_init(&s_lines, buf, buf ? LINE_MAX : 0, on_line, NULL);
+     gadget_chat_init(&s_chat);
+-}
+-
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    s_session_epoch++;
++    xSemaphoreGive(s_lock);
++}
+ static void sub_status(int status)
+ {
+-    LISA_LOGI(TAG, "/chat/subscribe status %d", status);
+-}
+-
++    if (status != 200) {
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        if (s_active) fail_locked();
++        xSemaphoreGive(s_lock);
++    }
++}
+ static void sub_data(const unsigned char *d, size_t len)
+ {
+-    if (s_lines.cap > 0) {
+-        gadget_lines_feed(&s_lines, d, len);
+-    }
+-}
+-
++    uint32_t dropped = s_lines.dropped;
++    if (s_lines.cap > 0) gadget_lines_feed(&s_lines, d, len);
++    if (s_lines.overflow || s_lines.dropped != dropped) {
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        if (s_active) fail_locked();
++        xSemaphoreGive(s_lock);
++    }
++}
+ static void sub_end(const char *error)
+ {
+-    LISA_LOGW(TAG, "/chat/subscribe ended: %s", error ? error : "by Impo");
++    (void)error;
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    s_session_epoch++;
++    if (s_active) fail_locked(); /* no replay/cursor contract: terminate this turn */
+     s_sub_open = false;
+-}
+-
++    xSemaphoreGive(s_lock);
++}
+ static const impo_link_stream_sink_t s_sub_sink = { sub_begin, sub_status, sub_data, sub_end };
+ 
+-/* ---- one turn ---- */
+-
+ static void free_replies(void)
+ {
+-    char *t;
+-    while (xQueueReceive(s_replies, &t, 0) == pdTRUE) {
+-        free(t);
+-    }
+-}
+-
++    reply_t r;
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    while (xQueueReceive(s_replies, &r, 0) == pdTRUE) free(r.text);
++    s_reply_bytes = 0;
++    xSemaphoreGive(s_lock);
++}
+ static void end_turn(bool stop_sound)
+ {
+-    impo_link_stream_cancel(s_note);
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (s_active && !s_finished && !s_stats.failed) mark_locked(IMPO_VOICE_CANCELLED);
++    s_active = false; /* callbacks and uploader lose ownership before local stop */
++    s_upload_pending = false;
++    int handle = s_note;
+     s_note = -1;
+-    if (stop_sound) {
+-        gadget_speech_cancel();
++    if (s_upload_running) s_stats.phase = IMPO_VOICE_CANCELLING;
++    xSemaphoreGive(s_lock);
++    if (stop_sound) gadget_speech_cancel();
++    impo_link_stream_cancel(handle);
++    /* The uploader may still own a source pointer; never reuse it early. The
++     * link adapter checks cancellation every 20 ms while queueing. */
++    for (;;) {
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        bool busy = s_upload_running;
++        xSemaphoreGive(s_lock);
++        if (!busy) break;
++        vTaskDelay(pdMS_TO_TICKS(10));
+     }
+     free_replies();
+     s_state = GADGET_VOICE_IDLE;
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    s_stats.phase = s_stats.failed ? IMPO_VOICE_FAILED : IMPO_VOICE_IDLE;
++    xSemaphoreGive(s_lock);
++}
++
++/* Only this worker encodes/uploads. The capture task publishes complete
++ * frames under a short mutex. Full chunks are divisible by 3; padding is
++ * emitted exactly once, with the final JSON terminator. */
++static void upload_turn(uint32_t epoch)
++{
++    uint64_t started = plat_uptime_ms();
++    int handle = impo_link_stream_open_ctx("/chat/stream", "application/json", NULL,
++        NULL, 0, true, &s_note_sink, (void *)(uintptr_t)epoch);
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    bool live = live_locked(epoch) && !s_note_failed;
++    if (live && handle >= 0 && !s_note_done) s_note = handle;
++    if (handle < 0 && live) fail_locked();
++    xSemaphoreGive(s_lock);
++    if (!live || handle < 0) { impo_link_stream_cancel(handle); return; }
++    if (impo_link_stream_send(handle, NOTE_HEAD, strlen(NOTE_HEAD), false) != 0) {
++        impo_link_stream_cancel(handle);
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        if (live_locked(epoch)) { s_note = -1; fail_locked(); }
++        xSemaphoreGive(s_lock);
++        return;
++    }
++    size_t off = 0;
++    for (;;) {
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        live = live_locked(epoch) && !s_note_failed && !s_interrupt && !s_stop && !s_touch;
++        size_t available = s_published - off;
++        bool sealed = s_sealed;
++        xSemaphoreGive(s_lock);
++        if (!live || plat_uptime_ms() - started >= UPLOAD_WAIT_MS) break;
++        if (!sealed && available < STAGE_BYTES) {
++            vTaskDelay(pdMS_TO_TICKS(10));
++            continue;
++        }
++        size_t n = available < STAGE_BYTES ? available : STAGE_BYTES;
++        bool last = sealed && n == available;
++        size_t e = gadget_base64(s_recording + off, n, s_encoded);
++        if (last) {
++            memcpy(s_encoded + e, NOTE_TAIL, sizeof(NOTE_TAIL)-1);
++            e += sizeof(NOTE_TAIL)-1;
++        }
++        if (last) {
++            xSemaphoreTake(s_lock, portMAX_DELAY);
++            s_final_sending = true;
++            xSemaphoreGive(s_lock);
++        }
++        if (impo_link_stream_send(handle, s_encoded, e, last) != 0) break;
++        off += n;
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        if (live_locked(epoch)) {
++            s_uploaded = off;
++            s_stats.queued_bytes = (uint32_t)off;
++            if (last) {
++                s_queued = true;
++                mark_locked(IMPO_VOICE_UPLOAD_QUEUED);
++            }
++        }
++        xSemaphoreGive(s_lock);
++        if (last) return; /* retain handle until ACK or explicit cancellation */
++    }
++    impo_link_stream_cancel(handle);
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (live_locked(epoch)) {
++        s_note = -1;
++        if (s_stop || s_touch || s_interrupt) mark_locked(IMPO_VOICE_CANCELLED);
++        else fail_locked();
++    }
++    xSemaphoreGive(s_lock);
++}
++static void upload_task(void *arg)
++{
++    (void)arg;
++    for (;;) {
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        bool run = s_upload_pending && s_active;
++        uint32_t epoch = s_epoch;
++        if (run) {
++            s_upload_pending = false;
++            s_upload_running = true;
++            mark_locked(IMPO_VOICE_UPLOAD_START);
++        }
++        xSemaphoreGive(s_lock);
++        if (run) {
++            upload_turn(epoch);
++            xSemaphoreTake(s_lock, portMAX_DELAY);
++            s_stats.upload_stack_free_bytes = (uint32_t)uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t);
++            s_upload_running = false;
++            xSemaphoreGive(s_lock);
++        }
++        vTaskDelay(pdMS_TO_TICKS(10));
++    }
+ }
+ 
+ static void wait_sound_done(uint32_t max_ms)
+@@ -217,25 +357,19 @@
+     }
+ }
+ 
+-/* Capture a complete bounded note before any upload can block this task.
+- * Large allocations use PSRAM; the mic queue only bridges audio dispatch jitter. */
++/* A complete bounded recording is retained even when the network falls behind. */
+ static bool listen(const char *test_text)
+ {
+-    static uint8_t *note;
+-    static char *enc;
+     const size_t capacity = sizeof(WAV_HEAD) + GADGET_SOUND_RATE * 2u * GADGET_VAD_MAX_MS / 1000u;
+-    if (note == NULL) {
+-        note = malloc(capacity);
+-    }
+-    if (enc == NULL) {
+-        enc = malloc(STAGE_BYTES / 3 * 4 + sizeof(NOTE_TAIL) + 4);
+-    }
+-    if (note == NULL || enc == NULL || impo_link_state() != IMPO_LINK_ONLINE) {
++    if (!s_recording) s_recording = malloc(capacity);
++    if (!s_encoded) s_encoded = malloc(STAGE_BYTES / 3 * 4 + sizeof(NOTE_TAIL) + 4);
++    if (!s_ack_buf) s_ack_buf = malloc(4096);
++    if (!s_recording || !s_encoded || !s_ack_buf || impo_link_state() != IMPO_LINK_ONLINE) {
+         gadget_sound_beep_down();
+         return false;
+     }
+     size_t recorded = sizeof(WAV_HEAD);
+-    memcpy(note, WAV_HEAD, sizeof(WAV_HEAD));
++    memcpy(s_recording, WAV_HEAD, sizeof(WAV_HEAD));
+     if (test_text == NULL) {
+         gadget_sound_beep();
+         wait_sound_done(1000);
+@@ -258,6 +392,22 @@
+     s_mic_dropped = 0;
+     s_touch = false;
+     s_state = GADGET_VOICE_LISTENING;
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    uint32_t boot_id = s_stats.boot_id;
++    memset(&s_stats, 0, sizeof(s_stats));
++    s_stats.boot_id = boot_id;
++    s_stats.turn_epoch = ++s_epoch;
++    s_stats.session_epoch = s_session_epoch;
++    s_stats.upload_overlap = s_config.upload_overlap;
++    s_stats.phase = IMPO_VOICE_LISTENING;
++    s_active = true;
++    s_finished = false;
++    s_published = recorded;
++    s_uploaded = s_ack_len = 0;
++    s_sealed = s_final_sending = s_heard = s_queued = s_acked = s_note_done = s_note_failed = false;
++    s_note_status = 0;
++    memset(&s_ack, 0, sizeof(s_ack));
++    xSemaphoreGive(s_lock);
+     if (plat_audio_mic_start(mic_cb) != 0) {
+         end_turn(true);
+         return false;
+@@ -266,20 +416,20 @@
+     s_turns++;
+ 
+     gadget_vad_t vad;
+-    gadget_vad_init(&vad);
++    gadget_vad_init_pause(&vad, s_config.endpoint_pause_ms);
+     gadget_vad_result_t vr = GADGET_VAD_LISTENING;
+     int16_t frame[FRAME];
+     size_t have = 0;
+-    uint32_t wall0 = (uint32_t)plat_uptime_ms();
++    uint64_t wall0 = plat_uptime_ms();
+     const char *why = NULL;
+     while (vr == GADGET_VAD_LISTENING) {
+         have += xStreamBufferReceive(s_mic, (uint8_t *)frame + have, sizeof(frame) - have, pdMS_TO_TICKS(200));
+-        if (s_touch || s_stop || s_interrupt) {
++        if (s_touch || s_stop || s_interrupt || s_note_failed) {
+             why = "touched";
+             break;
+         }
+         if (have < sizeof(frame)) {
+-            if ((uint32_t)plat_uptime_ms() - wall0 >= GADGET_VAD_MAX_MS + 2000u) {
++            if (plat_uptime_ms() - wall0 >= GADGET_VAD_MAX_MS + 2000u) {
+                 why = "mic timeout";
+                 break;
+             }
+@@ -291,18 +441,40 @@
+             why = "record limit";
+             break;
+         }
+-        memcpy(note + recorded, frame, sizeof(frame));
++        memcpy(s_recording + recorded, frame, sizeof(frame));
+         recorded += sizeof(frame);
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        s_published = recorded;
++        if (vad.heard && !s_heard) {
++            s_heard = true;
++            if (s_config.upload_overlap) s_upload_pending = true;
++        }
++        if (vad.heard && vad.quiet_ms == 0) {
++            s_stats.stage_ms[IMPO_VOICE_LAST_VOICE] = wall0 + vad.t_ms;
++            s_stats.valid_stages |= 1u << IMPO_VOICE_LAST_VOICE;
++        }
++        xSemaphoreGive(s_lock);
+     }
+     plat_audio_mic_stop();
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    mark_locked(IMPO_VOICE_CAPTURE_END);
++    s_stats.pcm_bytes = (uint32_t)(recorded - sizeof(WAV_HEAD));
++    s_stats.mic_dropped_bytes = s_mic_dropped;
++    s_stats.capture_end_backlog_bytes = (uint32_t)(recorded - s_uploaded);
++    xSemaphoreGive(s_lock);
+     s_touch = false;
+     if (why == NULL) {
+         why = vr == GADGET_VAD_PAUSE ? "pause" : vr == GADGET_VAD_NO_SPEECH ? "no speech" : "max length";
+     }
+     LISA_LOGI(TAG, "listened %u ms in %u ms (floor %u, threshold %u), ended by %s; mic dropped %u bytes",
+-              (unsigned)vad.t_ms, (unsigned)((uint32_t)plat_uptime_ms() - wall0), (unsigned)vad.floor_min,
++              (unsigned)vad.t_ms, (unsigned)(plat_uptime_ms() - wall0), (unsigned)vad.floor_min,
+               (unsigned)vad.threshold, why, (unsigned)s_mic_dropped);
+-    if (s_stop || s_interrupt || !vad.heard || s_mic_dropped != 0 || strcmp(why, "mic timeout") == 0) {
++    if (s_stop || s_interrupt || s_note_failed || strcmp(why, "touched") == 0 || !vad.heard || s_mic_dropped != 0 || strcmp(why, "mic timeout") == 0) {
++        if (s_mic_dropped || strcmp(why, "mic timeout") == 0) {
++            xSemaphoreTake(s_lock, portMAX_DELAY);
++            fail_locked();
++            xSemaphoreGive(s_lock);
++        }
+         end_turn(test_text != NULL);
+         gadget_sound_beep_down();
+         return false;
+@@ -312,45 +484,31 @@
+     } else {
+         wait_sound_done(15000);
+     }
+-    /* Exact RIFF/data lengths: the complete PCM note is now in memory. */
+-    uint32_t pcm_size = (uint32_t)(recorded - sizeof(WAV_HEAD));
+-    for (unsigned i = 0; i < 4; i++) {
+-        note[4 + i] = (uint8_t)((pcm_size + 36u) >> (8u * i));
+-        note[40 + i] = (uint8_t)(pcm_size >> (8u * i));
+-    }
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (!s_config.upload_overlap) {
++        uint32_t pcm_size = (uint32_t)(recorded - sizeof(WAV_HEAD));
++        for (unsigned i = 0; i < 4; i++) {
++            s_recording[4+i] = (uint8_t)((pcm_size+36u) >> (8u*i));
++            s_recording[40+i] = (uint8_t)(pcm_size >> (8u*i));
++        }
++        s_upload_pending = true;
++    }
++    s_sealed = true;
++    s_stats.phase = IMPO_VOICE_UPLOADING;
++    xSemaphoreGive(s_lock);
+     s_state = GADGET_VOICE_THINKING;
+-    s_acked = false;
+-    s_note = impo_link_stream_open("/chat/stream", "application/json", NULL, NOTE_HEAD, strlen(NOTE_HEAD), true,
+-                                   &s_note_sink);
+-    if (s_note < 0) {
+-        end_turn(false);
+-        return false;
+-    }
+     uint64_t upload0 = plat_uptime_ms();
+-    for (size_t off = 0; off < recorded;) {
+-        if (s_touch || s_interrupt || s_note_failed || plat_uptime_ms() - upload0 >= UPLOAD_WAIT_MS) {
+-            LISA_LOGW(TAG, "note upload cancelled: %u/%u bytes queued", (unsigned)off, (unsigned)recorded);
++    for (;;) {
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        bool queued = s_queued, failed = s_note_failed;
++        xSemaphoreGive(s_lock);
++        if (queued) return true;
++        if (failed || s_touch || s_stop || s_interrupt || plat_uptime_ms()-upload0 >= UPLOAD_WAIT_MS) {
+             end_turn(true);
+             return false;
+         }
+-        size_t n = recorded - off < STAGE_BYTES ? recorded - off : STAGE_BYTES;
+-        size_t e = gadget_base64(note + off, n, enc);
+-        bool last = off + n == recorded;
+-        if (last) {
+-            memcpy(enc + e, NOTE_TAIL, sizeof(NOTE_TAIL) - 1);
+-            e += sizeof(NOTE_TAIL) - 1;
+-        }
+-        if (impo_link_stream_send(s_note, enc, e, last) != 0) {
+-            LISA_LOGW(TAG, "note upload failed: %u/%u bytes queued", (unsigned)off, (unsigned)recorded);
+-            end_turn(true);
+-            return false;
+-        }
+-        off += n;
+-    }
+-    LISA_LOGI(TAG, "note queued: %u PCM bytes in %u ms", (unsigned)pcm_size,
+-              (unsigned)(plat_uptime_ms() - upload0));
+-    s_note = -1;   /* the link finishes it; note_end reports server acceptance */
+-    return true;
++        vTaskDelay(pdMS_TO_TICKS(10));
++    }
+ }
+ 
+ /* Speaks replies in order until a quiet spell; a touch ends it early. */
+@@ -362,7 +520,7 @@
+     char *current = NULL;      /* the reply being spoken, kept for one retry */
+     bool retried = false;
+     for (;;) {
+-        if (s_touch || s_interrupt) {
++        if (s_touch || s_stop || s_interrupt || s_note_failed) {
+             free(current);
+             return false;   /* caller handles cancellation */
+         }
+@@ -376,9 +534,26 @@
+             busy = true;
+         }
+         char *text = NULL;
+-        if (!busy && (st != GADGET_SOUND_FAILED || retried || current == NULL) &&
+-            xQueueReceive(s_replies, &text, 0) == pdTRUE) {
+-            LISA_LOGI(TAG, "reply: %.120s", text);
++        reply_t reply;
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        bool acked = s_acked;
++        if (s_active && spoke) s_stats.phase = busy ?
++            (st == GADGET_SOUND_PLAYING ? IMPO_VOICE_PLAYING : IMPO_VOICE_PREPARING) : IMPO_VOICE_WAITING;
++        if (acked && !busy && xQueueReceive(s_replies, &reply, 0) == pdTRUE) {
++            s_reply_bytes -= strlen(reply.text) + 1;
++            if (live_locked(reply.epoch) && reply.session_epoch == s_session_epoch &&
++                reply.parent[0] && gadget_chat_reply_is_ours(reply.parent, &s_ack)) {
++                text = reply.text;
++                if (!(s_stats.valid_stages & (1u << IMPO_VOICE_MESSAGE_DONE))) {
++                    s_stats.stage_ms[IMPO_VOICE_MESSAGE_DONE] = reply.received_ms;
++                    s_stats.valid_stages |= 1u << IMPO_VOICE_MESSAGE_DONE;
++                }
++                mark_locked(IMPO_VOICE_TTS_REQUEST);
++                s_stats.phase = IMPO_VOICE_PREPARING;
++            } else free(reply.text);
++        }
++        xSemaphoreGive(s_lock);
++        if (text != NULL) {
+             if (gadget_speech_say(text) != 0) {
+                 free(text); free(current);
+                 s_state = GADGET_VOICE_IDLE;
+@@ -415,13 +590,16 @@
+     }
+     free(current);
+     s_state = GADGET_VOICE_IDLE;
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    s_finished = completed;
++    if (!completed && !s_stop && !s_touch && !s_interrupt) fail_locked();
++    xSemaphoreGive(s_lock);
+     return completed;
+ }
+ 
+ static void run_requested_turn(void)
+ {
+-    char *test = s_test_text;
+-    s_test_text = NULL;
++    char *test = atomic_exchange(&s_test_text, NULL);
+     s_touch = s_wake = false;
+     bool interrupted = s_interrupt;
+     s_interrupt = false;
+@@ -431,6 +609,18 @@
+     end_turn(true);
+     if (followup || interrupted) vTaskDelay(pdMS_TO_TICKS(300)); /* queued DAC / speaker tail */
+     bool complete = !s_stop && listen(test) && await_replies();
++    impo_arcs_voice_snapshot_t stats;
++    gadget_voice_snapshot(&stats);
++    LISA_LOGI(TAG, "voice_turn boot=%08x epoch=%u session=%u overlap=%u valid=%x pcm=%u queued=%u backlog=%u dropped=%u failed=%u capture=%llu upload=%llu ack=%llu text=%llu tts=%llu",
++        (unsigned)stats.boot_id, (unsigned)stats.turn_epoch, (unsigned)stats.session_epoch,
++        (unsigned)stats.upload_overlap, (unsigned)stats.valid_stages, (unsigned)stats.pcm_bytes,
++        (unsigned)stats.queued_bytes, (unsigned)stats.capture_end_backlog_bytes,
++        (unsigned)stats.mic_dropped_bytes, (unsigned)(stats.failed || !complete),
++        (unsigned long long)stats.stage_ms[IMPO_VOICE_CAPTURE_END],
++        (unsigned long long)stats.stage_ms[IMPO_VOICE_UPLOAD_QUEUED],
++        (unsigned long long)stats.stage_ms[IMPO_VOICE_SERVER_ACK],
++        (unsigned long long)stats.stage_ms[IMPO_VOICE_MESSAGE_DONE],
++        (unsigned long long)stats.stage_ms[IMPO_VOICE_TTS_REQUEST]);
+     s_followup = test == NULL && s_session && complete && !s_stop && !s_interrupt;
+     if (!s_followup) {
+         end_turn(true);
+@@ -477,7 +667,6 @@
+ bool gadget_voice_interrupt(void)
+ {
+     if (impo_link_state() != IMPO_LINK_ONLINE || s_state == GADGET_VOICE_LISTENING || s_stop) return false;
+-    s_require_parent = true; /* Do not accept uncorrelated late replies after cancellation. */
+     s_interrupt = true;
+     gadget_sound_stop(); /* Stop locally now; the voice task cancels TTS and starts a fresh turn. */
+     return true;
+@@ -497,8 +686,12 @@
+         return -1;
+     }
+     char *copy = strdup(text);
+-    s_test_text = copy;
+-    return copy != NULL ? 0 : -1;
++    char *expected = NULL;
++    if (!copy || !atomic_compare_exchange_strong(&s_test_text, &expected, copy)) {
++        free(copy);
++        return -1;
++    }
++    return 0;
+ }
+ 
+ gadget_voice_state_t gadget_voice_state(void)
+@@ -515,14 +708,36 @@
+ int gadget_voice_start(void)
+ {
+     s_mic = xStreamBufferCreate(GADGET_SOUND_RATE * 2 * MIC_BUFFER_MS / 1000, sizeof(int16_t) * FRAME);
+-    s_replies = xQueueCreate(4, sizeof(char *));
+-    if (s_mic == NULL || s_replies == NULL) {
++    s_replies = xQueueCreate(4, sizeof(reply_t));
++    s_lock = xSemaphoreCreateMutex();
++    plat_random(&s_stats.boot_id, sizeof(s_stats.boot_id));
++    if (s_mic == NULL || s_replies == NULL || s_lock == NULL) {
+         LISA_LOGE(TAG, "no memory for the voice buffers");
+         return -1;
+     }
++    if (xTaskCreate(upload_task, "voice_upload", 4096 / sizeof(StackType_t), NULL, 2, NULL) != pdPASS) return -1;
+     if (xTaskCreate(voice_task, "gadget_voice", 8192 / sizeof(StackType_t), NULL, 3, &s_task) != pdPASS) {
+         return -1;
+     }
+     LISA_LOGI(TAG, "voice ready: touch to talk");
+     return 0;
+ }
++
++int gadget_voice_configure(const impo_arcs_voice_config_t *config)
++{
++    if (!config || config->endpoint_pause_ms < 600 || config->endpoint_pause_ms > 2000) return -1;
++    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
++    bool busy = s_state != GADGET_VOICE_IDLE || s_active || s_upload_running || s_upload_pending || s_session;
++    if (!busy) s_config = *config;
++    if (s_lock) xSemaphoreGive(s_lock);
++    return busy ? -1 : 0;
++}
++void gadget_voice_snapshot(impo_arcs_voice_snapshot_t *out)
++{
++    if (!out) return;
++    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
++    *out = s_stats;
++    if (s_active && s_stats.phase == IMPO_VOICE_PREPARING && gadget_sound_state() == GADGET_SOUND_PLAYING)
++        out->phase = IMPO_VOICE_PLAYING;
++    if (s_lock) xSemaphoreGive(s_lock);
++}
+--- a/arcs/gadget/gadget_voice.h
++++ b/arcs/gadget/gadget_voice.h
+@@ -3,6 +3,7 @@
+ 
+ #include <stdint.h>
+ #include <stdbool.h>
++#include "impo_arcs_voice.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -16,6 +17,8 @@
+ } gadget_voice_state_t;
+ 
+ int gadget_voice_start(void);
++int gadget_voice_configure(const impo_arcs_voice_config_t *config);
++void gadget_voice_snapshot(impo_arcs_voice_snapshot_t *out);
+ /* Idle: start listening. Listening: stop now. Replying: interrupt and listen again. Any task. */
+ void gadget_voice_trigger(void);
+ /* Board opt-in. A successful answer starts another turn; silence or a click exits. */
+--- a/arcs/gadget/gadget_voice_logic.c
++++ b/arcs/gadget/gadget_voice_logic.c
+@@ -9,7 +9,13 @@
+ 
+ void gadget_vad_init(gadget_vad_t *v)
+ {
++    gadget_vad_init_pause(v, GADGET_VAD_PAUSE_MS);
++}
++
++void gadget_vad_init_pause(gadget_vad_t *v, uint32_t pause_ms)
++{
+     memset(v, 0, sizeof(*v));
++    v->pause_ms = pause_ms >= 600 && pause_ms <= 2000 ? pause_ms : GADGET_VAD_PAUSE_MS;
+     v->floor_min = UINT32_MAX;
+     v->threshold = GADGET_VAD_MIN_RMS;
+ }
+@@ -36,7 +42,7 @@
+     } else {
+         v->quiet_ms += frame_ms;
+     }
+-    if (v->heard && v->quiet_ms >= GADGET_VAD_PAUSE_MS) {
++    if (v->heard && v->quiet_ms >= v->pause_ms) {
+         return GADGET_VAD_PAUSE;
+     }
+     if (!v->heard && v->t_ms >= GADGET_VAD_NO_SPEECH_MS) {
+@@ -64,6 +70,7 @@
+     for (size_t i = 0; i < len; i++) {
+         char c = (char)data[i];
+         if (c == '\n') {
++            if (l->overflow) l->dropped++;
+             if (!l->overflow && l->len > 0) {
+                 if (l->buf[l->len - 1] == '\r') {
+                     l->len--;
+--- a/arcs/gadget/gadget_voice_logic.h
++++ b/arcs/gadget/gadget_voice_logic.h
+@@ -35,11 +35,13 @@
+     uint32_t floor_min;
+     uint32_t threshold;
+     uint32_t quiet_ms;
++    uint32_t pause_ms;
+     uint32_t loud_ms;        /* above the threshold so far */
+     bool heard;
+ } gadget_vad_t;
+ 
+ void gadget_vad_init(gadget_vad_t *v);
++void gadget_vad_init_pause(gadget_vad_t *v, uint32_t pause_ms);
+ /* One frame's rms. The first GADGET_VAD_CALIBRATE_MS set the threshold:
+  * 3 x the quietest frame, kept within the bounds. */
+ gadget_vad_result_t gadget_vad_frame(gadget_vad_t *v, uint32_t rms, uint32_t frame_ms);
+@@ -49,6 +51,7 @@
+ typedef struct {
+     char *buf;
+     size_t len, cap;
++    uint32_t dropped;        /* complete oversized lines discarded */
+     bool overflow;           /* the current line is too long: skipped through its newline */
+     void (*on_line)(void *ctx, char *line);
+     void *ctx;
+--- a/arcs/link/impo_link.h
++++ b/arcs/link/impo_link.h
+@@ -37,6 +37,17 @@
+     void (*on_end)(const char *error);
+ } impo_link_stream_sink_t;
+ 
++/* Context-bearing internal variant. The context must outlive callbacks already
++ * executing at cancellation; an integer epoch encoded as a pointer is safe. */
++typedef struct {
++    void (*on_begin)(void *ctx);
++    void (*on_status)(void *ctx, int status);
++    void (*on_data)(void *ctx, const unsigned char *data, size_t len);
++    void (*on_end)(void *ctx, const char *error);
++} impo_link_stream_sink_ctx_t;
++int impo_link_stream_open_ctx(const char *path, const char *content_type, const char *accept,
++    const void *body, size_t len, bool more, const impo_link_stream_sink_ctx_t *sink, void *ctx);
++
+ /* Request streams on the Noise session. Any task may call these; the work runs on the link
+  * task in order, and the sink's callbacks run there too.
+  * open: POST path with body; more=true when send() will add to the body. Returns a handle, or
+--- a/arcs/link/impo_link_streams.c
++++ b/arcs/link/impo_link_streams.c
+@@ -15,6 +15,7 @@
+ 
+ #include "FreeRTOS.h"
+ #include "semphr.h"
++#include "task.h"
+ 
+ #include "sysutils.h"
+ 
+@@ -38,6 +39,8 @@
+     uint16_t gen;
+     int64_t id;
+     const impo_link_stream_sink_t *sink;
++    const impo_link_stream_sink_ctx_t *sink_ctx;
++    void *ctx;
+ } slot_t;
+ 
+ static __psram_bss__ slot_t s_slots[SLOTS];
+@@ -77,11 +80,20 @@
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+     slot_t *s = slot_of(handle);
+     const impo_link_stream_sink_t *sink = s != NULL ? s->sink : NULL;
++    const impo_link_stream_sink_ctx_t *sink_ctx = s != NULL ? s->sink_ctx : NULL;
++    void *user_ctx = s != NULL ? s->ctx : NULL;
+     bool done = s != NULL && (end || status < 0);
+     if (done) {
+         release(s);
+     }
+     xSemaphoreGive(s_lock);
++    if (sink_ctx != NULL) {
++        if (status > 0 && sink_ctx->on_status) sink_ctx->on_status(user_ctx, status);
++        if (len > 0 && sink_ctx->on_data) sink_ctx->on_data(user_ctx, data, len);
++        if (done && sink_ctx->on_end) sink_ctx->on_end(user_ctx,
++            status == NOISE_CTRL_REQ_TOO_LARGE ? "reply too large" : status < 0 ? "connection dropped" : NULL);
++        return;
++    }
+     if (sink == NULL) {
+         return;   /* cancelled: the sink hears nothing more */
+     }
+@@ -98,7 +110,7 @@
+     }
+ }
+ 
+-static bool send_body(int64_t id, const uint8_t *data, size_t len, bool end)
++static bool send_body(int handle, int64_t id, const uint8_t *data, size_t len, bool end)
+ {
+     size_t total = len;
+     uint64_t started = plat_uptime_ms();
+@@ -106,10 +118,22 @@
+         size_t n = len > CHUNK_MAX ? CHUNK_MAX : len;
+         uint64_t waited = plat_uptime_ms() - started;
+         uint32_t wait_ms = waited < SEND_WAIT_MS ? SEND_WAIT_MS - (uint32_t)waited : 0;
+-        if (!noise_ctrl_req_send(id, data, n, end && n == len, wait_ms)) {
+-            LISA_LOGW(TAG, "body queue failed: %u/%u bytes accepted in %u ms", (unsigned)(total - len),
+-                      (unsigned)total, (unsigned)(plat_uptime_ms() - started));
+-            return false;
++        /* A failed queue insertion owns no bytes. Short waits let cancellation
++         * invalidate the handle without waiting for the full queue budget. */
++        for (;;) {
++            xSemaphoreTake(s_lock, portMAX_DELAY);
++            slot_t *current = slot_of(handle);
++            bool live = current != NULL && current->id == id;
++            xSemaphoreGive(s_lock);
++            if (!live) return false;
++            if (noise_ctrl_req_send(id, data, n, end && n == len, wait_ms > 20 ? 20 : wait_ms)) break;
++            waited = plat_uptime_ms() - started;
++            if (waited >= SEND_WAIT_MS) {
++                LISA_LOGW(TAG, "body queue deadline: %u/%u bytes", (unsigned)(total-len), (unsigned)total);
++                return false;
++            }
++            wait_ms = SEND_WAIT_MS - (uint32_t)waited;
++            vTaskDelay(pdMS_TO_TICKS(1)); /* allocation/queue failure may return immediately */
+         }
+         data += n;
+         len -= n;
+@@ -121,10 +145,11 @@
+     return true;
+ }
+ 
+-int impo_link_stream_open(const char *path, const char *content_type, const char *accept, const void *body,
+-                          size_t len, bool more, const impo_link_stream_sink_t *sink)
+-{
+-    if (!noise_ctrl_is_connected() || path == NULL || sink == NULL) {
++static int stream_open(const char *path, const char *content_type, const char *accept, const void *body,
++                          size_t len, bool more, const impo_link_stream_sink_t *sink,
++    const impo_link_stream_sink_ctx_t *sink_ctx, void *ctx)
++{
++    if (!noise_ctrl_is_connected() || path == NULL || (sink == NULL && sink_ctx == NULL)) {
+         return -1;
+     }
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+@@ -133,6 +158,8 @@
+         if (!s_slots[i].used) {
+             s_slots[i].used = true;
+             s_slots[i].sink = sink;
++            s_slots[i].sink_ctx = sink_ctx;
++            s_slots[i].ctx = ctx;
+             handle = handle_of(i);
+         }
+     }
+@@ -163,7 +190,8 @@
+     }
+     headers[h] = NULL;
+ 
+-    if (sink->on_begin != NULL) {
++    if (sink_ctx && sink_ctx->on_begin) sink_ctx->on_begin(ctx);
++    if (sink && sink->on_begin != NULL) {
+         sink->on_begin();
+     }
+     bool has_body = len > 0 || more;
+@@ -179,23 +207,36 @@
+     xSemaphoreGive(s_lock);
+     if (id == 0) {
+         LISA_LOGE(TAG, "%s: the session is down or busy", path);
+-        if (sink->on_end != NULL) {
++        if (sink && sink->on_end != NULL) {
+             sink->on_end("could not reach Impo");
+         }
++        if (sink_ctx && sink_ctx->on_end) sink_ctx->on_end(ctx, "could not reach Impo");
+         return -1;
+     }
+     LISA_LOGI(TAG, "stream %lld: POST %s", (long long)id, path);
+-    if (len > 0 && !send_body(id, body, len, !more)) {
++    if (len > 0 && !send_body(handle, id, body, len, !more)) {
+         LISA_LOGE(TAG, "stream %lld: body not queued", (long long)id);
+         impo_link_stream_cancel(handle);
+-        if (sink->on_end != NULL) {
++        if (sink && sink->on_end != NULL) {
+             sink->on_end("could not send to Impo");
+         }
++        if (sink_ctx && sink_ctx->on_end) sink_ctx->on_end(ctx, "could not send to Impo");
+         return -1;
+     }
+     return handle;
+ }
+ 
++int impo_link_stream_open(const char *path, const char *content_type, const char *accept,
++    const void *body, size_t len, bool more, const impo_link_stream_sink_t *sink)
++{
++    return stream_open(path, content_type, accept, body, len, more, sink, NULL, NULL);
++}
++int impo_link_stream_open_ctx(const char *path, const char *content_type, const char *accept,
++    const void *body, size_t len, bool more, const impo_link_stream_sink_ctx_t *sink, void *ctx)
++{
++    return stream_open(path, content_type, accept, body, len, more, NULL, sink, ctx);
++}
++
+ int impo_link_stream_send(int handle, const void *data, size_t len, bool end)
+ {
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+@@ -205,7 +246,7 @@
+     if (id == 0) {
+         return -1;
+     }
+-    return send_body(id, data, len, end) ? 0 : -1;
++    return send_body(handle, id, data, len, end) ? 0 : -1;
+ }
+ 
+ void impo_link_stream_cancel(int handle)
