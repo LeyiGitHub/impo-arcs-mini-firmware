@@ -1,0 +1,304 @@
+diff --git a/arcs/app/CMakeLists.txt b/arcs/app/CMakeLists.txt
+--- a/arcs/app/CMakeLists.txt
++++ b/arcs/app/CMakeLists.txt
+@@ -16,6 +16,8 @@
+ set(UPSTREAM_MAIN ${SDK_ROOT}/esp32/main)
+ set(UPSTREAM_IMPO ${SDK_ROOT}/esp32/components/impo)
+ set(UPSTREAM_NOISE_CORE ${SDK_ROOT}/esp32/components/noise_core)
++# Shared route policy; only its implementation sees ESP-IDF compatibility headers.
++listenai_include_directories(${SDK_ROOT}/esp32/components/impo_cloud_route/include)
+ 
+ # memap.h is read by the SDK linker scripts from the application directory.
+ listenai_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+diff --git a/arcs/app/Kconfig b/arcs/app/Kconfig
+--- a/arcs/app/Kconfig
++++ b/arcs/app/Kconfig
+@@ -1,4 +1,5 @@
+ osource "$ARCS_BASE/Kconfig"
++rsource "../../esp32/components/impo_cloud_route/Kconfig"
+ 
+ menu "Impo Gadget"
+ 
+diff --git a/arcs/platform/arcs/esp_compat/CMakeLists.txt b/arcs/platform/arcs/esp_compat/CMakeLists.txt
+--- a/arcs/platform/arcs/esp_compat/CMakeLists.txt
++++ b/arcs/platform/arcs/esp_compat/CMakeLists.txt
+@@ -13,6 +13,7 @@
+     ${UPSTREAM_MAIN}/noise_control.cpp
+     ${UPSTREAM_MAIN}/stack_monitor.c
+     ${UPSTREAM_MAIN}/vm_api.c
++    ${SDK_ROOT}/esp32/components/impo_cloud_route/impo_cloud_route.c
+ )
+ 
+ # Compat headers first; then esp32/main (gadget_attest.h, ota.h, led_status.h...) and
+diff --git a/arcs/platform/arcs/esp_compat/esp_http_client.c b/arcs/platform/arcs/esp_compat/esp_http_client.c
+--- a/arcs/platform/arcs/esp_compat/esp_http_client.c
++++ b/arcs/platform/arcs/esp_compat/esp_http_client.c
+@@ -13,6 +13,8 @@
+ 
+ struct esp_http_client {
+     char url[512];
++    char common_name[128];
++    uint32_t timeout_ms;
+     esp_http_client_method_t method;
+     http_event_handle_cb handler;
+     void *user_data;
+@@ -50,6 +52,12 @@
+         free(c);
+         return NULL;
+     }
++    if (config->common_name != NULL &&
++        (size_t)snprintf(c->common_name, sizeof(c->common_name), "%s", config->common_name) >= sizeof(c->common_name)) {
++        free(c);
++        return NULL;
++    }
++    c->timeout_ms = config->timeout_ms > 0 ? (uint32_t)config->timeout_ms : 10000;
+     c->method = config->method;
+     c->handler = config->event_handler;
+     c->user_data = config->user_data;
+@@ -161,8 +169,9 @@
+             return ESP_ERR_NO_MEM;
+         }
+         http_response_t resp;
+-        int r = http_request(c->method == HTTP_METHOD_POST ? "POST" : "GET", c->url, headers, c->post,
+-                             (size_t)c->post_len, ESP_COMPAT_HTTP_MAX_RESPONSE, &resp);
++        int r = http_request_named(c->method == HTTP_METHOD_POST ? "POST" : "GET", c->url,
++                                   c->common_name[0] ? c->common_name : NULL, c->timeout_ms,
++                                   headers, c->post, (size_t)c->post_len, ESP_COMPAT_HTTP_MAX_RESPONSE, &resp);
+         free(headers);
+         if (r != 0) {
+             dispatch(c, HTTP_EVENT_ERROR, NULL, 0);
+diff --git a/arcs/platform/arcs/esp_compat/esp_tls.c b/arcs/platform/arcs/esp_compat/esp_tls.c
+--- a/arcs/platform/arcs/esp_compat/esp_tls.c
++++ b/arcs/platform/arcs/esp_compat/esp_tls.c
+@@ -86,7 +86,7 @@
+     esp_compat_wdt_alive("tls_connect");
+     int err = 0;
+     uint32_t timeout = cfg != NULL && cfg->timeout_ms > 0 ? (uint32_t)cfg->timeout_ms : 10000;
+-    tls->conn = plat_tls_connect(host, (uint16_t)port, timeout, &err);
++    tls->conn = plat_tls_connect_named(host, (uint16_t)port, cfg ? cfg->common_name : NULL, timeout, &err);
+     esp_compat_wdt_alive("tls_connected");
+     if (tls->conn == NULL) {
+         snprintf(s_last_event, sizeof(s_last_event), "tls connect -0x%04x", err < 0 ? -err : err);
+diff --git a/arcs/platform/arcs/esp_compat/include/esp_http_client.h b/arcs/platform/arcs/esp_compat/include/esp_http_client.h
+--- a/arcs/platform/arcs/esp_compat/include/esp_http_client.h
++++ b/arcs/platform/arcs/esp_compat/include/esp_http_client.h
+@@ -63,7 +63,8 @@
+ typedef struct {
+     const char *url;
+     esp_http_client_method_t method;
+-    int timeout_ms;          /* accepted; plat_tls reads time out after 10 s */
++    const char *common_name; /* SNI and verified certificate identity; NULL = URL host */
++    int timeout_ms;          /* connect/handshake and response read timeout */
+     int buffer_size;         /* accepted */
+     int buffer_size_tx;      /* accepted */
+     http_event_handle_cb event_handler;
+diff --git a/arcs/platform/arcs/esp_compat/include/esp_tls.h b/arcs/platform/arcs/esp_compat/include/esp_tls.h
+--- a/arcs/platform/arcs/esp_compat/include/esp_tls.h
++++ b/arcs/platform/arcs/esp_compat/include/esp_tls.h
+@@ -30,6 +30,7 @@
+ 
+ typedef struct {
+     esp_err_t (*crt_bundle_attach)(void *conf);   /* accepted; plat_tls always verifies */
++    const char *common_name;                     /* SNI and verified certificate identity; NULL = peer */
+     int timeout_ms;                               /* TCP connect and TLS handshake */
+ } esp_tls_cfg_t;
+ 
+diff --git a/arcs/platform/arcs/http_client.c b/arcs/platform/arcs/http_client.c
+--- a/arcs/platform/arcs/http_client.c
++++ b/arcs/platform/arcs/http_client.c
+@@ -6,6 +6,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <strings.h>
+ 
+ #include "platform_arcs.h"
+ #include "http_client.h"
+@@ -17,22 +18,32 @@
+ 
+ int http_parse_url(const char *url, http_url_t *out)
+ {
++    if (url == NULL || out == NULL) return -1;
+     memset(out, 0, sizeof(*out));
+-    if (strncmp(url, "https://", 8) != 0) {
+-        return -1;
+-    }
++    if (strncmp(url, "https://", 8) != 0 || strpbrk(url, "\r\n")) return -1;
+     const char *host = url + 8;
+-    const char *path = strchr(host, '/');
+-    const char *host_end = path ? path : host + strlen(host);
+-    const char *colon = memchr(host, ':', (size_t)(host_end - host));
+-    const char *name_end = colon ? colon : host_end;
++    const char *path = host + strcspn(host, "/?#");
++    const char *colon = memchr(host, ':', (size_t)(path - host));
++    const char *name_end = colon ? colon : path;
+     size_t n = (size_t)(name_end - host);
+-    if (n == 0 || n >= sizeof(out->host)) {
+-        return -1;
+-    }
++    if (n == 0 || n >= sizeof(out->host) || memchr(host, '@', (size_t)(path - host))) return -1;
+     memcpy(out->host, host, n);
+-    out->port = colon ? (uint16_t)atoi(colon + 1) : 443;
+-    snprintf(out->path, sizeof(out->path), "%s", path ? path : "/");
++    out->port = 443;
++    if (colon) {
++        unsigned long port = 0;
++        if (colon + 1 == path) return -1;
++        for (const char *c = colon + 1; c < path; c++) {
++            if (!isdigit((unsigned char)*c)) return -1;
++            port = port * 10 + (unsigned)(*c - '0');
++            if (port > 65535) return -1;
++        }
++        if (port == 0) return -1;
++        out->port = (uint16_t)port;
++    }
++    size_t len = strcspn(path, "#");
++    const char *prefix = *path == '/' ? "" : "/";
++    if (len + strlen(prefix) >= sizeof(out->path)) return -1;
++    snprintf(out->path, sizeof(out->path), "%s%.*s", prefix, (int)len, path);
+     return 0;
+ }
+ 
+@@ -78,8 +89,27 @@
+     return NULL;
+ }
+ 
++/* Unlike response headers, extra_headers starts with a header, not a status line. */
++static bool has_host_header(const char *headers)
++{
++    for (const char *line = headers; line && *line;) {
++        if (strncasecmp(line, "Host:", 5) == 0) return true;
++        const char *next = strstr(line, "\r\n");
++        line = next ? next + 2 : NULL;
++    }
++    return false;
++}
++
+ int http_request(const char *method, const char *url, const char *extra_headers,
+                  const void *body, size_t body_len, size_t max_response, http_response_t *resp)
++{
++    return http_request_named(method, url, NULL, READ_TIMEOUT_MS, extra_headers,
++                              body, body_len, max_response, resp);
++}
++
++int http_request_named(const char *method, const char *url, const char *tls_name, uint32_t timeout_ms,
++                       const char *extra_headers, const void *body, size_t body_len,
++                       size_t max_response, http_response_t *resp)
+ {
+     memset(resp, 0, sizeof(*resp));
+     http_url_t u;
+@@ -89,7 +119,7 @@
+     }
+ 
+     int err = 0;
+-    plat_tls_t *tls = plat_tls_connect(u.host, u.port, READ_TIMEOUT_MS, &err);
++    plat_tls_t *tls = plat_tls_connect_named(u.host, u.port, tls_name, timeout_ms, &err);
+     if (tls == NULL) {
+         return err ? err : -1;
+     }
+@@ -101,15 +131,20 @@
+         plat_tls_close(tls);
+         return -1;
+     }
++    char host_header[160] = "";
++    if (!has_host_header(extra_headers)) {
++        if (u.port == 443) snprintf(host_header, sizeof(host_header), "Host: %s\r\n", u.host);
++        else snprintf(host_header, sizeof(host_header), "Host: %s:%u\r\n", u.host, u.port);
++    }
+     int n = snprintf(head, head_cap,
+                      "%s %s HTTP/1.1\r\n"
+-                     "Host: %s\r\n"
++                     "%s"
+                      "User-Agent: impo-gadget-arcs/%s\r\n"
+                      "Connection: close\r\n"
+                      "Content-Length: %u\r\n"
+                      "%s"
+                      "\r\n",
+-                     method, u.path, u.host, plat_firmware_version(), (unsigned)body_len,
++                     method, u.path, host_header, plat_firmware_version(), (unsigned)body_len,
+                      extra_headers ? extra_headers : "");
+     int ret = -1;
+     if (n <= 0 || (size_t)n >= head_cap) {
+@@ -133,7 +168,7 @@
+             resp->truncated = true;
+             break;
+         }
+-        int r = plat_tls_read(tls, buf + got, max_response - got, READ_TIMEOUT_MS);
++        int r = plat_tls_read(tls, buf + got, max_response - got, timeout_ms);
+         LISA_LOGD(TAG, "read %d (total %u)", r, (unsigned)(got + (r > 0 ? r : 0)));
+         if (r > 0) {
+             got += (size_t)r;
+diff --git a/arcs/platform/arcs/http_client.h b/arcs/platform/arcs/http_client.h
+--- a/arcs/platform/arcs/http_client.h
++++ b/arcs/platform/arcs/http_client.h
+@@ -29,6 +29,11 @@
+ int http_request(const char *method, const char *url, const char *extra_headers,
+                  const void *body, size_t body_len, size_t max_response, http_response_t *resp);
+ 
++/* tls_name controls SNI/certificate validation independently of the URL peer. */
++int http_request_named(const char *method, const char *url, const char *tls_name, uint32_t timeout_ms,
++                       const char *extra_headers, const void *body, size_t body_len,
++                       size_t max_response, http_response_t *resp);
++
+ void http_response_free(http_response_t *resp);
+ 
+ #ifdef __cplusplus
+diff --git a/arcs/platform/arcs/net_wifi.c b/arcs/platform/arcs/net_wifi.c
+--- a/arcs/platform/arcs/net_wifi.c
++++ b/arcs/platform/arcs/net_wifi.c
+@@ -23,6 +23,7 @@
+ #include "shell.h"
+ 
+ #include "platform_arcs.h"
++#include "impo_cloud_route.h"
+ 
+ #define TAG "plat_wifi"
+ #include "lisa_log.h"
+@@ -45,6 +46,9 @@
+         return;
+     }
+     if (success) {
++        if (s_wifi.ip != ip) {
++            impo_cloud_route_reset(); /* Atomic only; /where runs in the requesting task. */
++        }
+         s_wifi.ip = ip;
+         LISA_LOGI(TAG, "got ip %u.%u.%u.%u gw %u.%u.%u.%u",
+                   ip & 0xff, (ip >> 8) & 0xff, (ip >> 16) & 0xff, ip >> 24,
+diff --git a/arcs/platform/arcs/plat_tls.c b/arcs/platform/arcs/plat_tls.c
+--- a/arcs/platform/arcs/plat_tls.c
++++ b/arcs/platform/arcs/plat_tls.c
+@@ -113,6 +113,12 @@
+ 
+ plat_tls_t *plat_tls_connect(const char *host, uint16_t port, uint32_t timeout_ms, int *err)
+ {
++    return plat_tls_connect_named(host, port, NULL, timeout_ms, err);
++}
++
++plat_tls_t *plat_tls_connect_named(const char *host, uint16_t port, const char *tls_name,
++                                   uint32_t timeout_ms, int *err)
++{
+     int ret;
+     if (err != NULL) {
+         *err = 0;
+@@ -174,7 +180,7 @@
+     mbedtls_ssl_conf_read_timeout(&t->conf, timeout_ms);
+ 
+     if ((ret = mbedtls_ssl_setup(&t->ssl, &t->conf)) != 0 ||
+-        (ret = mbedtls_ssl_set_hostname(&t->ssl, host)) != 0) {
++        (ret = mbedtls_ssl_set_hostname(&t->ssl, tls_name ? tls_name : host)) != 0) {
+         log_error("setup", ret);
+         goto fail;
+     }
+diff --git a/arcs/platform/arcs/platform_arcs.h b/arcs/platform/arcs/platform_arcs.h
+--- a/arcs/platform/arcs/platform_arcs.h
++++ b/arcs/platform/arcs/platform_arcs.h
+@@ -92,6 +92,9 @@
+ typedef struct plat_tls plat_tls_t;
+ /* Returns NULL on failure; *err (optional) gets the mbedtls or socket error. */
+ plat_tls_t *plat_tls_connect(const char *host, uint16_t port, uint32_t timeout_ms, int *err);
++/* Dial host:port, but authenticate tls_name (NULL uses host), including SNI. */
++plat_tls_t *plat_tls_connect_named(const char *host, uint16_t port, const char *tls_name,
++                                   uint32_t timeout_ms, int *err);
+ int plat_tls_write(plat_tls_t *tls, const void *buf, size_t len);   /* writes all, returns len or <0 */
+ /* >0 bytes read, 0 peer closed, PLAT_TLS_TIMEOUT, <0 error. */
+ int plat_tls_read(plat_tls_t *tls, void *buf, size_t len, uint32_t timeout_ms);

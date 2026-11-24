@@ -16,6 +16,7 @@ gadget=upstream/arcs/gadget
   tests/test_sound_buffer.c "$gadget/gadget_sound.c" "$gadget/gadget_pcm.c" -lm -o "$output/sound"
 "$output/sound"
 sh tests/run_wifi.sh
+sh tests/run_cloud.sh
 python3 -m py_compile tools/prepare_sdk.py tools/build.py tools/check_image.py tools/gen_manifest.py tools/gen_screen_font.py
 if [ -n "${ARCS_BASE:-}" ]; then
     sh tests/run_tls.sh

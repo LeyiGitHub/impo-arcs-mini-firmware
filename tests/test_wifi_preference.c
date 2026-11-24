@@ -6,6 +6,8 @@
 static char saved_pref[33];
 static wifi_mgr_sta_config_t stored,connected;
 static unsigned joins,autos,saves,prefs,deleted;
+static unsigned route_resets;
+void impo_cloud_route_reset(void) { route_resets++; }
 static bool wrong_network;
 static int join_error; static bool found=true,kv_present=true;
 void test_log(const char *t,const char *f,...) {(void)t;(void)f;}
@@ -55,6 +57,11 @@ static void reset(void)
 }
 int main(void)
 {
+ reset();dhcp_status_cb(WIFI_VIF_STA_IDX,true,1,0,0,NULL);assert(route_resets==1);
+ dhcp_status_cb(WIFI_VIF_STA_IDX,true,1,0,0,NULL);assert(route_resets==1);
+ dhcp_status_cb(WIFI_VIF_STA_IDX,true,2,0,0,NULL);assert(route_resets==2);
+ dhcp_status_cb(WIFI_VIF_STA_IDX,false,0,0,0,NULL);
+ dhcp_status_cb(WIFI_VIF_STA_IDX,true,2,0,0,NULL);assert(route_resets==3);
  reset();preferred_boot_task(NULL);assert(joins==1&&autos==1&&deleted==1&&s_wifi.ip);
  reset();kv_present=false;preferred_boot_task(NULL);assert(!joins&&autos==1&&deleted==1);
  reset();found=false;preferred_boot_task(NULL);assert(!joins&&autos==1);

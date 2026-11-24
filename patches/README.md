@@ -4,5 +4,10 @@
 
 - `0001-buffer-network-speech.patch`：保留官方 Impo `/tts`、WAV 解码和音频队列，在原有 PSRAM 内缓冲短句；未完成的短句不直接播放。长回复在队列写满前启动。自测等待缓冲完成，失败或超时后不再空录音。
 - `0002-bound-tls-reads.patch`：非阻塞 TLS 读取遇到 WANT_READ / WANT_WRITE 时立即交回调用者；有超时时限的读取使用剩余时间，避免内部重试无限延长。保留 SNI、证书链和主机名校验。
+- `0003-reduce-small-record-delay.patch`：TCP_NODELAY 和慢写诊断。
+- `0004-capture-voice-before-upload.patch`：完整录音结束后通过官方流上传。
+- `0005-wake-and-continuous-dialogue.patch`：本地唤醒的麦克风所有权和连续回合。
+- `0006-remember-selected-network.patch`：启动时优先尝试最后手动选择成功的网络。
+- `0007-official-china-route.patch`：将上游国内路由源码及 Kconfig 接入 ARCS；补齐 TLS `common_name`、独立连接地址、HTTP Host/非默认端口和超时参数，Wi-Fi 地址变化重置地区缓存。国内路由策略和 TLS 透传实现保持官方版本，见 [说明](../docs/CHINA_ROUTE.md)。
 
 这些是本项目的社区修正，不代表上游已接受。TLS、WebSocket、Noise、配对、凭据刷新、设备身份和语音上传协议继续使用原 SDK。网络连接质量和实际听测见 `docs/VALIDATION.md`。

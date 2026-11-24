@@ -9,6 +9,8 @@ REQUIRED = (
     "__lisa_device_registry_spi0", "__lisa_device_registry_display",
     "__lisa_device_registry_st7789p3", "yunbao_wake_start",
     "gadget_voice_wake", "gadget_voice_continuous_active", "preferred_boot_task",
+    "impo_cloud_route_endpoint", "impo_cloud_route_url", "impo_cloud_route_tls_name",
+    "impo_cloud_route_report", "impo_cloud_route_reset", "plat_tls_connect_named",
 )
 
 def check(build):

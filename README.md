@@ -1,11 +1,12 @@
 # IMPO + ARCS Mini 固件
 
-基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的云宝语音盒子固件工程。设备自己连接 `gadgets.impo.ai`，使用官方 BLE 配对、Noise 链路、设备命令和语音回合；不依赖原来的 Mac / ACK / LifeLike 桥接服务。
+基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的云宝语音盒子固件工程。设备使用官方 BLE 配对、Noise 链路、设备命令和语音回合，默认启用官方国内路由：大陆网络自动选择 `gadget.itoy.cn:9443`，TLS 仍与 `gadgets.impo.ai` 建立；其他地区或国内线路连续失败时按官方策略直连。不依赖原来的 Mac / ACK / LifeLike 桥接服务。详见 [国内连接](docs/CHINA_ROUTE.md)。
 
-这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 的固定提交获取到 `upstream/`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话及选网优先级的社区修正；共享链路与语音代码不另写一份。
+这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 固定到 `0b83ffb70dfbd7e1986b1e7746259335af8030f0`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话、选网优先级及国内路由兼容层；共享链路、路由和语音代码不另写一份。
 
 ## 当前状态
 
+- 2026-11-24 已升级到官方国内路由与 TLS 透传版本，完整主机回归及交叉编译通过；国内线路的实机连接和语音尚待验收，详见 [国内连接](docs/CHINA_ROUTE.md)。
 - 云宝板级目标已实现：扬声器功放 PA01、左声道麦克风、PB04 按键。
 - 2026-11-23 已通过一次实物问答：用户短按后问“二加三等于几”，Impo 回复“五”，用户确认听到完整回答；该回合约 24 秒后开始播放。当前仍存在连接停顿与重连，不能据此宣称稳定性通过。
 - 已接入原机“你好云宝”本地唤醒和连续对话，实机结果见验收记录；短按开始/退出，静音约 5 秒退出，长按沿用 SDK 关机策略。详见 [唤醒与连续对话](docs/WAKE_DIALOGUE.md)。
@@ -40,11 +41,12 @@ macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker
 
 ```sh
 sh tests/run.sh
+sh tests/run_cloud.sh
 ARCS_BASE=/path/to/arcs-sdk-0.1.6 sh tests/run_tls.sh
 ARCS_BASE=/path/to/arcs-sdk-0.1.6 sh upstream/arcs/tests/host/run.sh
 ```
 
-第一项获取固定 SDK、应用补丁，检查按键策略、屏幕渲染边界和音频队列的缓冲行为；第二项检查真实平台 TLS 读取函数的非阻塞、超时行为和 TCP_NODELAY 的参数与失败容错；第三项运行官方 SDK 的配对、音频、语音、策略与链路纯逻辑测试。设置了 `ARCS_BASE` 时，第一项也会运行 TLS 读取测试。
+`run.sh` 获取固定 SDK、应用补丁，并检查按键、屏幕、音频队列、选网和国内路由。`run_cloud.sh` 可单独运行官方路由与真实 ARCS HTTP/TLS 兼容层回归；`run_tls.sh` 检查平台 TLS 读取边界、TCP_NODELAY、SNI 和强制证书校验配置。最后一项运行官方 SDK 的配对、音频、语音、策略与链路纯逻辑测试。设置了 `ARCS_BASE` 时，第一项也会运行 TLS 读取测试。
 
 设置 `ARCS_BASE` 后，第一项还会执行真实语音任务的录音与上传测试；也可单独运行 `sh tests/run_voice.sh`。它检查网络调用发生前麦克风已停止、PCM 顺序与 WAV 长度、慢上传、静音、失败和取消期限，以及连续两轮、静音退出、按键取消、麦克风独占和唤醒资源边界。
 
