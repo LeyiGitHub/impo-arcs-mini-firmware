@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 output=$(mktemp -d)
 trap 'rm -rf "$output"' EXIT
 M=$ARCS_BASE/modules/mbedtls/mbedtls
-set -- tests/test_tls_reads.c
+set -- tests/test_tls_reads.c upstream/arcs/platform/arcs/ca_bundle.c
 for source in "$M"/library/*.c; do
     case "$source" in */net_sockets.c) continue ;; esac
     set -- "$@" "$source"

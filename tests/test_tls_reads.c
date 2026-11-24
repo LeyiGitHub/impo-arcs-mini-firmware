@@ -5,6 +5,7 @@
 #include <string.h>
 #include "mbedtls/ssl.h"
 #include "mbedtls/ctr_drbg.h"
+#include "mbedtls/sha256.h"
 static int fake_seed(mbedtls_ctr_drbg_context *ctx,
                      int (*entropy)(void *, unsigned char *, size_t), void *arg,
                      const unsigned char *custom, size_t len)
@@ -39,7 +40,6 @@ static int fake_ssl_read(mbedtls_ssl_context *ssl, unsigned char *buf, size_t le
 #undef mbedtls_ssl_handshake
 #undef mbedtls_ctr_drbg_seed
 
-const char plat_ca_bundle_pem[] = "";
 uint64_t plat_uptime_ms(void) { return now_ms; }
 bool plat_time_synced(void) { return true; }
 void vTaskDelay(unsigned ms) { now_ms += ms; delays += ms; }
@@ -96,16 +96,27 @@ int main(void)
     assert(plat_tls_read(&t, buf, sizeof(buf), 0) == -0x7400);
     /* Exercise the real TLS configuration while replacing the network handshake.
      * The socket peer and verified/SNI identity must stay independent. */
-    s_ca_ready = true;
     int err = 0;
-    plat_tls_t *named = plat_tls_connect_named("gadget.itoy.cn", 9443, "gadgets.impo.ai", 5000, &err);
+    plat_tls_t *named = plat_tls_connect_named("gadget.itoy.cn", 9443, "gw.itoy.cn", 5000, &err);
     assert(named && !err && !strcmp(dial_host,"gadget.itoy.cn") && !strcmp(dial_port,"9443"));
-    assert(!strcmp(named->ssl.hostname,"gadgets.impo.ai"));
+    assert(!strcmp(named->ssl.hostname,"gw.itoy.cn"));
+    /* Parse the firmware's real trust bundle, including the relay's new root. */
+    bool relay_root_found = false;
+    const unsigned char root_sha256[32] = {
+        0xc3,0x2f,0xfd,0x9f,0x46,0xf9,0x36,0xd1,0x6c,0x36,0x73,0x99,0x09,0x59,0x43,0x4b,
+        0x9a,0xd6,0x0a,0xaf,0xbb,0x9e,0x7c,0xf3,0x36,0x54,0xf1,0x44,0xcc,0x1b,0xa1,0x43
+    };
+    for (mbedtls_x509_crt *ca = &s_ca; ca && ca->raw.p; ca = ca->next) {
+        unsigned char digest[32];
+        assert(mbedtls_sha256_ret(ca->raw.p, ca->raw.len, digest, 0) == 0);
+        if (!memcmp(digest, root_sha256, sizeof(digest))) relay_root_found = true;
+    }
+    assert(relay_root_found);
     plat_tls_close(named);
     named = plat_tls_connect("custom.example",443,5000,&err);
     assert(named && !strcmp(named->ssl.hostname,"custom.example"));plat_tls_close(named);
     handshake_result = MBEDTLS_ERR_X509_CERT_VERIFY_FAILED;
-    assert(!plat_tls_connect_named("gadget.itoy.cn",9443,"gadgets.impo.ai",5000,&err));
+    assert(!plat_tls_connect_named("gadget.itoy.cn",9443,"gw.itoy.cn",5000,&err));
     assert(err == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED);
     puts("TLS route: separate peer/SNI, required certificate verification and failure propagation passed");
     puts("TLS reads: nonblocking WANT_READ/WANT_WRITE, deadline, data, timeout, close and errors passed");

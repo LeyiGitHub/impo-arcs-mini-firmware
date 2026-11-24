@@ -64,21 +64,22 @@ static void http_case(const char *url, const char *name, const char *host, unsig
     esp_http_client_config_t cfg = { .url=url, .common_name=name, .timeout_ms=(int)timeout,
                                     .disable_auto_redirect=true };
     esp_http_client_handle_t c = esp_http_client_init(&cfg); assert(c);
-    if (explicit_host) assert(esp_http_client_set_header(c, "hOsT", "gadgets.impo.ai") == ESP_OK);
+    if (explicit_host) assert(esp_http_client_set_header(c, "hOsT", name) == ESP_OK);
     assert(esp_http_client_set_header(c, "Authorization", "Bearer synthetic-test-only") == ESP_OK);
     assert(esp_http_client_perform(c) == ESP_OK);
     assert(esp_http_client_get_status_code(c) == 401);
     assert(!strcmp(peer, host) && peer_port == port && deadline == timeout);
     assert(!strcmp(identity, name ? name : host));
     assert(strstr(request, "Authorization: Bearer synthetic-test-only\r\n"));
-    single_host(explicit_host ? "gadgets.impo.ai" : port == 9443 ? "gadget.itoy.cn:9443" : host);
+    single_host(explicit_host ? name : port == 9443 ? "gadget.itoy.cn:9443" : host);
     assert(esp_http_client_cleanup(c) == ESP_OK);
 }
 int main(void)
 {
-    http_case("https://gadget.itoy.cn:9443/api/v1/gadgets/vms", "gadgets.impo.ai",
+    http_case("https://gadget.itoy.cn:9443/api/v1/gadgets/vms", "gw.itoy.cn",
               "gadget.itoy.cn", 9443, 15000, true);
-    http_case("https://gadget.itoy.cn:9443/where", NULL, "gadget.itoy.cn", 9443, 5000, false);
+    http_case("https://gadget.itoy.cn:9443/where?name=gw.itoy.cn", NULL, "gadget.itoy.cn", 9443, 5000, false);
+    assert(strstr(request,"GET /where?name=gw.itoy.cn HTTP/1.1\r\n"));
     http_case("https://gadgets.impo.ai/api/v1/gadgets/vms", NULL, "gadgets.impo.ai", 443, 10000, false);
     http_case("https://custom.example/vms", NULL, "custom.example", 443, 10000, false);
     http_url_t u;
@@ -87,11 +88,11 @@ int main(void)
     const char *bad[] = { "https://x:0/", "https://x:65536/", "https://x:abc/", "https://x:/",
                           "https://user@x/", "https://x/\r\nInjected: x", "http://x/" };
     for (unsigned i=0; i<sizeof(bad)/sizeof(bad[0]); i++) assert(http_parse_url(bad[i], &u) < 0);
-    esp_tls_cfg_t cfg = { .common_name="gadgets.impo.ai", .timeout_ms=12000 };
+    esp_tls_cfg_t cfg = { .common_name="gw.itoy.cn", .timeout_ms=12000 };
     esp_tls_t *tls = esp_tls_init(); assert(tls);
     assert(esp_tls_conn_new_sync("gadget.itoy.cn", (int)strlen("gadget.itoy.cn"), 9443, &cfg, tls) == 1);
     assert(!strcmp(peer,"gadget.itoy.cn") && peer_port==9443 && deadline==12000);
-    assert(!strcmp(identity,"gadgets.impo.ai"));
+    assert(!strcmp(identity,"gw.itoy.cn"));
     esp_tls_conn_destroy(tls);
     tls=esp_tls_init(); assert(tls);
     assert(esp_tls_conn_new_sync("custom.example", 14, 443, NULL, tls) == 1);
