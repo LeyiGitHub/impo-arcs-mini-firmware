@@ -1,7 +1,7 @@
 {
   "impo_gadget_sdk": {
     "repository": "https://github.com/impoai/impo-gadget-sdk",
-    "commit": "0b83ffb70dfbd7e1986b1e7746259335af8030f0"
+    "commit": "ad0e6b7527501248631569516483e4845e2e5665"
   },
   "arcs_sdk": {
     "version": "0.1.6",

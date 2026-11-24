@@ -1,8 +1,8 @@
 # IMPO + ARCS Mini SDK
 
-基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的可复用 Arcs-Mini2 设备 SDK，包含公共 C/C++ 接口、产品配置、应用扩展和云宝参考固件。设备使用官方 BLE 配对、Noise 链路、设备命令和语音回合，默认启用官方国内路由：大陆网络自动选择 `gadget.itoy.cn:9443`，TLS 仍与 `gadgets.impo.ai` 建立；其他地区或国内线路连续失败时按官方策略直连。不依赖原来的 Mac / ACK / LifeLike 桥接服务。详见 [国内连接](docs/CHINA_ROUTE.md)。
+基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的可复用 Arcs-Mini2 设备 SDK，包含公共 C/C++ 接口、产品配置、应用扩展和云宝参考固件。设备使用官方 BLE 配对、Noise 链路、设备命令和语音回合，默认启用官方国内路由：大陆网络自动选择 `gadget.itoy.cn:9443`，TLS 和 HTTP Host 使用官方网关名 `gw.itoy.cn`；其他地区或国内线路连续失败时按官方策略直连。不依赖原来的 Mac / ACK / LifeLike 桥接服务。详见 [国内连接](docs/CHINA_ROUTE.md)。
 
-这是独立的社区适配仓库。SDK 版本 **0.1.0**，面向与当前云宝相同接线的设备；不同产品通过 JSON 配置名称、平台产品 ID、连续对话和唤醒资源。接入、示例及资源约束见 [SDK 使用指南](docs/SDK.md)。官方 SDK 按 `dependencies.lock.json` 固定到 `0b83ffb70dfbd7e1986b1e7746259335af8030f0`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话、选网优先级及国内路由兼容层；共享链路、路由和语音代码不另写一份。
+这是独立的社区适配仓库。SDK 版本 **0.1.0**，面向与当前云宝相同接线的设备；不同产品通过 JSON 配置名称、平台产品 ID、连续对话和唤醒资源。接入、示例及资源约束见 [SDK 使用指南](docs/SDK.md)。官方 SDK 按 `dependencies.lock.json` 固定到 `ad0e6b7527501248631569516483e4845e2e5665`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话、选网优先级及国内路由兼容层；共享链路、路由和语音代码不另写一份。
 
 ## 复用方式
 
@@ -24,7 +24,7 @@ python3 tools/build.py --docker \
 
 - SDK 0.1.0 重构通过主机检查、C/C++ 接口检查及默认产品/独立应用示例的完整编译。重构镜像本次未刷入设备，下述实物验收属于此前已验证的固件；详见 [验收记录](docs/VALIDATION.md)。
 
-- 2026-11-24 已升级到官方国内路由与 TLS 透传版本，完整主机回归及交叉编译通过；云宝 CP 写入与独立读回通过，其他分区逐字节不变。启动栈修正后，屏幕、语音及连续对话已获人工确认；实机识别大陆后因国内业务 TLS 连续被重置，按官方策略回退直连。国内中继业务链路尚未通过。详见 [国内连接](docs/CHINA_ROUTE.md)。
+- 2026-11-24 已升级到官方国内路由与 TLS 透传版本，完整主机回归及交叉编译通过；云宝 CP 写入与独立读回通过，其他分区逐字节不变。启动栈修正后，屏幕、语音及连续对话已获人工确认；实机识别大陆后因国内业务 TLS 连续被重置，按官方策略回退直连。此前国内中继的 TLS 重置已由上游新名称修正覆盖；新提交的 Mac 中继 TLS/健康探测已通过，云宝新固件仍须另行刷写和实测。详见 [国内连接](docs/CHINA_ROUTE.md)。
 - 云宝板级目标已实现：扬声器功放 PA01、左声道麦克风、PB04 按键。
 - 2026-11-23 已通过一次实物问答：用户短按后问“二加三等于几”，Impo 回复“五”，用户确认听到完整回答；该回合约 24 秒后开始播放。当前仍存在连接停顿与重连，不能据此宣称稳定性通过。
 - 已接入原机“你好云宝”本地唤醒和连续对话，实机结果见验收记录；短按开始/退出，静音约 5 秒退出，长按沿用 SDK 关机策略。详见 [唤醒与连续对话](docs/WAKE_DIALOGUE.md)。
