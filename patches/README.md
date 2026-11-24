@@ -10,4 +10,6 @@
 - `0006-remember-selected-network.patch`：启动时优先尝试最后手动选择成功的网络。
 - `0007-official-china-route.patch`：将上游国内路由源码及 Kconfig 接入 ARCS；补齐 TLS `common_name`、独立连接地址、HTTP Host/非默认端口和超时参数，Wi-Fi 地址变化重置地区缓存。国内路由策略和 TLS 透传实现保持官方版本，见 [说明](../docs/CHINA_ROUTE.md)。
 
+- `0008-preferred-wifi-startup-budget.patch`：首选网络任务延后 1 秒启动，为同步存储和连接调用提供与 SDK Wi-Fi 管理任务一致的 8 KiB 栈，并记录栈余量。用于排查启动回归，不能将此改动本身视为栈溢出根因已确认。
+
 这些是本项目的社区修正，不代表上游已接受。TLS、WebSocket、Noise、配对、凭据刷新、设备身份和语音上传协议继续使用原 SDK。网络连接质量和实际听测见 `docs/VALIDATION.md`。

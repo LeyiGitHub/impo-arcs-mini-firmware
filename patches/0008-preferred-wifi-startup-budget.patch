@@ -1,0 +1,33 @@
+diff --git a/arcs/platform/arcs/net_wifi.c b/arcs/platform/arcs/net_wifi.c
+--- a/arcs/platform/arcs/net_wifi.c
++++ b/arcs/platform/arcs/net_wifi.c
+@@ -138,6 +138,9 @@
+ static void preferred_boot_task(void *arg)
+ {
+     (void)arg;
++    /* Let the main task finish USB/UI bring-up before entering the SDK's
++     * synchronous storage/connect path. */
++    vTaskDelay(pdMS_TO_TICKS(1000));
+     char *ssid = NULL;
+     wifi_mgr_sta_config_t cfg = {0};
+     if (lisa_kv_get_string(KV_PREFERRED_WIFI, &ssid) == 0 && ssid &&
+@@ -152,6 +155,10 @@
+     if (ssid) lisa_kv_free(ssid);
+     wifi_mgr_autoconn_config_t autoconn = { .interval_ms = AUTO_CONNECT_INTERVAL_MS };
+     wifi_mgr_auto_connect_start(&autoconn);
++#if INCLUDE_uxTaskGetStackHighWaterMark == 1
++    LISA_LOGI(TAG, "preferred task minimum free stack: %u bytes",
++              (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t)));
++#endif
+     vTaskDelete(NULL);
+ }
+ 
+@@ -172,7 +179,7 @@
+     }
+ 
+     save_build_time_network();
+-    if (xTaskCreate(preferred_boot_task, "wifi_preferred", 2048 / sizeof(StackType_t), NULL, 2, NULL) != pdPASS) {
++    if (xTaskCreate(preferred_boot_task, "wifi_preferred", 8192 / sizeof(StackType_t), NULL, 2, NULL) != pdPASS) {
+         wifi_mgr_autoconn_config_t autoconn = { .interval_ms = AUTO_CONNECT_INTERVAL_MS };
+         wifi_mgr_auto_connect_start(&autoconn);
+     }

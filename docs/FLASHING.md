@@ -2,6 +2,10 @@
 
 本目标针对云宝 ARCS Mini 语音盒子，不是 V2.1 机器狗。先确认扬声器功放 PA01、按键 PB04、左声道麦克风及 ST7789P3 单屏，显示引脚见 [屏幕适配](SCREEN.md)。核对 AP/CP 的 IPC、PSRAM 与分区布局；其他型号不能只因为芯片同属 LS26 就直接刷写。
 
+用户提供的 Arcs-Mini2 板卡说明将侧面两个键称为 **RST 键**和**主功能键**。主功能键长按 3 秒以上用于开关机，运行后短按用于交互；RST 单击标注为关机，不能把它当作普通的应用复位来指导操作。保持 USB 连接，按住主功能键并短按、松开 RST，再松开主功能键，可进入 Recovery。进入后仍须核对下面的唯一芯片身份。
+
+原机 Boot 可以先显示“长按功能键开机”的充电待机页，再熄屏；应用层的 USB 启动逻辑不能替代 Boot 的开机门槛。新固件启动失败时先抓取诊断，不反复尝试按键组合，也不使用板卡旧固件的多击清网或恢复出厂功能。
+
 1. 通过唯一 ADB serial/transport 核验目标芯片和原固件。旧 firmware 用交互式 `adb -s <serial> shell` 中的 `device get_device_id` 与 `version`。先结束当前对话。
 2. 在同一个交互式 shell 运行 `recovery`，确认 `adb devices -l` 出现同芯片的 `BOOT-<chip>`。旧固件可能不支持 `adb reboot recovery` 服务。
 3. 从 recovery 的 ADB sync `RECV /RAW/NAND/0/1000000` 读取完整 16 MiB 闪存两次，校验长度及 SHA256 一致。保存在仓库外的私有目录（0600），其中可能有凭据。工具与协议见官方 `upstream/arcs/adb_download.sh` 和 ListenAI 文档。
