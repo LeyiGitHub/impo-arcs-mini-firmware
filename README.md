@@ -4,6 +4,17 @@
 
 这是独立的社区适配仓库。SDK 版本 **0.1.0**，面向与当前云宝相同接线的设备；不同产品通过 JSON 配置名称、平台产品 ID、连续对话和唤醒资源。接入、示例及资源约束见 [SDK 使用指南](docs/SDK.md)。官方 SDK 按 `dependencies.lock.json` 固定到 `ad0e6b7527501248631569516483e4845e2e5665`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话、选网优先级及国内路由兼容层；共享链路、路由和语音代码不另写一份。
 
+## 版本与兼容性
+
+**本项目共用一套 SDK 源码和公共接口，按聆思底层 SDK 版本分别编译。** `0.1.6` / `0.1.8` 是聆思官方 ARCS SDK 的版本；本项目 SDK 的版本是 `0.1.0`，Impo 官方依赖用提交号单独固定。
+
+| 聆思底层版本 | 目标设备保留的 AP | 构建参数 | 产物目录 |
+| --- | --- | --- | --- |
+| **ListenAI 0.1.6** | 与 0.1.6 兼容的 AP；原云宝已核验 | `--arcs-sdk-version 0.1.6`（默认值） | `upstream/arcs/build-<产品 id>/` |
+| **ListenAI 0.1.8** | 与 0.1.8 兼容的 AP；当前“小聆小聆”Mini2 已核验 | `--arcs-sdk-version 0.1.8` | `upstream/arcs/build-<产品 id>-arcs018/` |
+
+两套聆思底层依赖和构建产物分开；公共接口、产品配置及 Impo 协议代码共用。每份产物附 `impo-sdk-build.json` 标记 `listenai_sdk_version`、产品和镜像 SHA256。**不能将两种固件混刷，也不能仅凭设备外观、名称或唤醒词选择底层版本。** 版本层级、配置文件、完整构建命令及产物标记见 [SDK 版本对照](docs/SDK_VERSIONS.md)。
+
 ## 复用方式
 
 - 默认云宝：`python3 tools/build.py --docker --product products/yunbao.json`。
@@ -44,7 +55,7 @@ python3 tools/build.py --docker
 
 需要 Python 3、Git、Docker 和你有权使用的 ListenAI ARCS SDK。默认使用 **0.1.6**；保留原机 0.1.8 AP 时显式选择 `--arcs-sdk-version 0.1.8`，SDK 使用对应的双核初始化及唤醒 API。源码共用，构建目录按底层版本分开；构建工具拒绝声明版本与 `ARCS_BASE` 不符。工具链镜像、Impo SDK 提交和聆思源码树记录于 `dependencies.lock.json`。不分发 ListenAI SDK、AP、boot、唤醒资源和原机闪存。
 
-macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker`。默认输出为 `upstream/arcs/build-yunbao/impo-gadget.bin`；其他产品输出到 `upstream/arcs/build-<产品 id>/`。宿主需要 Python 3.9+。
+macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker`。默认输出为 `upstream/arcs/build-yunbao/impo-gadget.bin`；其他产品的输出目录见上方版本对照表，0.1.8 带 `-arcs018` 后缀。宿主需要 Python 3.9+。
 
 ## 配对与使用
 
