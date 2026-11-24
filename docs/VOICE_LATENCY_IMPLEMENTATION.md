@@ -1,6 +1,6 @@
 # 语音延迟优化：第一阶段
 
-基于 `447e107`，分支 `codex/voice-latency`。设计依据为 [VOICE_LATENCY_DESIGN.md](VOICE_LATENCY_DESIGN.md)。本阶段实现采集与上传解耦、回合关联、阶段查询及可配置端点；性能收益仍须用同一设备的交错 A/B 样本确认。
+基于 `447e107`，分支 `codex/voice-latency`。设计依据为 [VOICE_LATENCY_DESIGN.md](VOICE_LATENCY_DESIGN.md)。本阶段实现采集与上传解耦、回合关联、阶段查询及可配置端点；已在目标 Mini2 完成 60 次固定短问交错探索，结果与边界见验证记录。
 
 ## 已实现
 
@@ -14,13 +14,13 @@
 
 ## 配置与观测
 
-现有产品缺省行为仍是 `batch`、1200 ms，完整文字及原有播放缓冲。产品可增加：
+SDK 通用缺省保持 `batch`、1200 ms，完整文字及原有播放缓冲。产品可增加：
 
 ```json
 "voice": {"upload_mode": "overlap", "endpoint_pause_ms": 1200}
 ```
 
-`products/arcs-mini2-latency-batch.json` 和 `products/arcs-mini2-latency-overlap.json` 使用相同的“小周小周”单麦克风唤醒资源，仅上传模式不同。资源从本地历史设备备份提取；其原 AP 分区与目标 Mini2 保留的 AP 逐字节一致，模型和 wrap 摘要写入 `resources/wake/xiaozhou-preserved.json`。构建仍校验资源，不能仅改标签替代声学模型。模型二进制不随仓库分发；实机资源安装、声音触发和在线结果见验证记录。`batch` 为当前设备默认模式，重启后保留“小周小周”。
+`products/arcs-mini2-latency-batch.json` 和 `products/arcs-mini2-latency-overlap.json` 使用相同的“小周小周”单麦克风唤醒资源，仅上传模式不同。资源从本地历史设备备份提取；其原 AP 分区与目标 Mini2 保留的 AP 逐字节一致，模型和 wrap 摘要写入 `resources/wake/xiaozhou-preserved.json`。构建仍校验资源，不能仅改标签替代声学模型。模型二进制不随仓库分发；实机资源安装、声音触发和在线结果见验证记录。本机当前部署 `overlap`、1200 ms，重启保留该模式和“小周小周”；独立 `batch` 产品用于回退。
 
 构建元数据 `impo-sdk-build.json` 记录语音配置。应用可调用 `impo_arcs_mini_configure_voice()`、`impo_arcs_mini_voice_snapshot()`；配置只在空闲且连续会话已结束时接受。运行时配置不持久化，重启恢复产品默认值。
 
@@ -46,13 +46,15 @@ voice_latency batch 800
 | 6 | 首笔 TTS 请求发起 |
 | 7 | 本地回合取消 |
 
-每轮 `voice_turn` 摘要仅含随机启动标识、代次、长度和时间，不含用户语音、回答正文或身份。首 PCM、实际 DMA、声学首声、底层首/末次 TX 及服务端分段追踪尚未接入该快照，不用当前“正在回答”状态代替声学测量。
+每轮 `voice_turn` 摘要仅含随机启动标识、代次、长度和时间，不含用户语音、回答正文或身份。补丁 `0018` 另输出 `speech_timing` 的首响应体字节、解码器首 PCM，以及 `sound_first_write` 的音频驱动首次接受写入，均带声音代次和设备单调时间；这些日志没有扩展上述快照。驱动写入不是 DMA 回调或声学首声。实际 DMA、底层首/末次 TX 及服务端分段追踪尚未接入，不能用“正在回答”状态代替声学测量。
 
 ## 验证边界
 
 主机测试执行实际录音和上传实现，使用独立麦克风、采集、上传线程，以及真实互斥量。覆盖 6 秒/15 秒的缩放队列停顿、15 秒容量、跨块 Base64 解码后的全部 PCM、WAV 长度、无语音、采集超时、发送失败、取消、ACK 乱序、陈旧回调、队列超限、连续对话与唤醒打断。Link 测试执行实际槽位实现，覆盖上下文、旧接口、取消与槽位复用。主机结果不代表官方网关接受未知长度 WAV。
 
-精确镜像、读回及物理验证结果记录于 [VOICE_LATENCY_VALIDATION.md](VOICE_LATENCY_VALIDATION.md)。`overlap` 必须先通过当前网关兼容测试；实验失败时仅在回合结束后切回 `batch`，不自动重发未知结果的请求。
+精确镜像、读回及物理验证结果记录于 [VOICE_LATENCY_VALIDATION.md](VOICE_LATENCY_VALIDATION.md)。本机已完成当前网关的完整请求、取消和不完整请求观察，以及固定短问声学对照；这些结果不自动代表其他网关、SDK 或全部语料。回退仅在回合结束后切回 `batch`，不自动重发未知结果的请求。
+
+独立的协议负向检查应用、固定语料交错测试及 Mac 声学代理测量流程见 [测试工具说明](VOICE_LATENCY_BENCH.md)。诊断应用不进入普通固件；其额外订阅结束后，恢复并重启普通应用再做问答对照。
 
 ## 后续门槛
 

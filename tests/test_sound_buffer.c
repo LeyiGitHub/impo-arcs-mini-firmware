@@ -12,6 +12,7 @@ static int16_t played[256];
 static size_t played_n;
 static bool amp_on;
 
+uint64_t plat_uptime_ms(void) { return 100; }
 void test_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
 int lisa_kv_get_int(const char *key, int *v) { (void)key; (void)v; return -1; }
 int lisa_kv_set_int(const char *key, int v) { (void)key; (void)v; return 0; }

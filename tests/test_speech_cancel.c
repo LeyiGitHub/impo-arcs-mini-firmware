@@ -7,6 +7,7 @@
 static const impo_link_stream_sink_t *sink;
 static unsigned generation, samples, completed, stopped, opened;
 static int cancelled=-1;
+uint64_t plat_uptime_ms(void) { return 100; }
 void test_log(const char *tag,const char *fmt,...) {(void)tag;(void)fmt;}
 uint32_t gadget_sound_begin_buffered(const char *what) {(void)what;return ++generation;}
 int gadget_sound_write(uint32_t gen,const int16_t *pcm,size_t n,uint32_t ms)

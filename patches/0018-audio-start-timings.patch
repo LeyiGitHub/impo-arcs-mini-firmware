@@ -1,0 +1,74 @@
+--- a/arcs/gadget/gadget_speech.c
++++ b/arcs/gadget/gadget_speech.c
+@@ -12,6 +12,7 @@
+ #include "gadget_sound.h"
+ #include "gadget_speech.h"
+ #include "impo_link.h"
++#include "platform_arcs.h"
+ 
+ #define TAG "gadget_speech"
+ #include "lisa_log.h"
+@@ -24,6 +25,7 @@
+     uint32_t gen;
+     bool failed;
+     bool complete;
++    bool first_pcm;
+     uint32_t bytes;
+     gadget_wav_t wav;
+ } s;
+@@ -31,6 +33,11 @@
+ static int emit(void *ctx, const int16_t *pcm, size_t n)
+ {
+     (void)ctx;
++    if (n && !s.first_pcm) {
++        s.first_pcm = true;
++        LISA_LOGI(TAG, "speech_timing gen=%u stage=first_pcm mono_ms=%llu", (unsigned)s.gen,
++                  (unsigned long long)plat_uptime_ms());
++    }
+     return gadget_sound_write(s.gen, pcm, n, WRITE_WAIT_MS);
+ }
+ 
+@@ -63,6 +70,10 @@
+ {
+     if (s.failed || s.complete) {
+         return;
++    }
++    if (!s.bytes && len) {
++        LISA_LOGI(TAG, "speech_timing gen=%u stage=first_byte mono_ms=%llu", (unsigned)s.gen,
++                  (unsigned long long)plat_uptime_ms());
+     }
+     bool was_in = s.wav.in_data;
+     s.bytes += len;
+--- a/arcs/gadget/gadget_sound.c
++++ b/arcs/gadget/gadget_sound.c
+@@ -243,6 +243,7 @@
+     uint16_t tail_rms[10] = { 0 }, tail_peak[10] = { 0 };   /* the last 160 ms played, for the log */
+     unsigned tail_at = 0;
+     bool played = false;
++    uint32_t written_gen = 0;
+     for (;;) {
+         plat_watchdog_checkin(wd);
+         /* Keep the current 30 s PSRAM ring; do not increase internal SRAM. */
+@@ -257,6 +258,7 @@
+                 LISA_LOGI(TAG, "speech buffer ready: %u ms", (unsigned)(s_count * 1000 / RATE));
+             }
+         }
++        uint32_t gen = s_gen;
+         size_t n = ring_take(block, BLOCK);
+         if (n == 0) {
+             if (played) {
+@@ -302,7 +304,13 @@
+         tail_peak[tail_at] = (uint16_t)peak;
+         tail_at = (tail_at + 1) % 10;
+         played = true;
+-        plat_audio_write(block, BLOCK);
++        int result = plat_audio_write(block, BLOCK);
++        if (gen == s_gen && gen != written_gen) {
++            written_gen = gen;
++            /* Driver acceptance is not a DMA callback or acoustic first sound. */
++            LISA_LOGI(TAG, "sound_first_write gen=%u mono_ms=%llu result=%d", (unsigned)gen,
++                      (unsigned long long)plat_uptime_ms(), result);
++        }
+     }
+ }
+ 
