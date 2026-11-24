@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "arcs-mini2-xiaoling",
+  "display_name": "Arcs Mini 2",
+  "model_id": "arcs-mini2",
+  "node_prefix": "arcsmini2",
+  "product_id": null,
+  "continuous_dialogue": true,
+  "china_relay": true,
+  "wake": {"enabled": true, "bundle": "../resources/wake/xiaoling-preserved.json"}
+}

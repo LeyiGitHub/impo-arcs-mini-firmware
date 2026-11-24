@@ -1,0 +1,77 @@
+diff --git a/arcs/platform/arcs/plat_init.c b/arcs/platform/arcs/plat_init.c
+index 9d5ec87..c8de1a6 100644
+--- a/arcs/platform/arcs/plat_init.c
++++ b/arcs/platform/arcs/plat_init.c
+@@ -6,6 +6,7 @@
+ #include "sys_init.h"
+ #include "cJSON.h"
+ #include "ipc_master.h"
++#include "sdk_version.h"
+ #include "lisa_kv.h"
+ #include "lisa_mem.h"
+ #include "netdev.h"
+@@ -27,6 +28,7 @@
+ extern int lisa_shell_init(void);
+ extern int ic_message_init();
+ extern int sal_init(void);
++#if SDK_VERSION_NUMBER == SDK_VERSION(0, 1, 6)
+ extern void ipc_mem_init(int32_t wifi_ipc_mode);
+ extern int32_t ic_lock_init(void);
+ 
+@@ -39,6 +41,9 @@ static int plat_ipc_early_init(void)
+ }
+ SYS_INIT(plat_ipc_early_init, SYS_INIT_LEVEL_PRE_DEVICES_INIT, 5);
+ #endif
++#elif SDK_VERSION_NUMBER != SDK_VERSION(0, 1, 8)
++#error "Unsupported ListenAI ARCS SDK; use a reviewed 0.1.6 or 0.1.8 profile"
++#endif
+ 
+ #if CFG_NVS
+ /* Wi-Fi/BT calibration data lives in the last 32 KB of flash (matches mtt1.0-impo). */
+@@ -79,7 +84,9 @@ uint64_t plat_uptime_ms(void)
+ int plat_init(void)
+ {
+     s_boot_ms = lisa_os_get_tick_ms();
++#if SDK_VERSION_NUMBER == SDK_VERSION(0, 1, 6)
+     struct ipc_master_cb_tag ipc_cb = {0};
++#endif
+     cJSON_Hooks hooks = { .malloc_fn = cjson_malloc, .free_fn = cjson_free };
+ 
+     plat_crash_init();   /* reads the previous boot's record before this boot writes its own */
+@@ -92,8 +99,16 @@ int plat_init(void)
+     heap_caps_malloc_extmem_enable(16);
+     cJSON_InitHooks(&hooks);
+     plat_boot_stage("ipc with the AP core");
++#if SDK_VERSION_NUMBER == SDK_VERSION(0, 1, 8)
++    /* 0.1.8 initializes IPC in SYS_INIT before devices. The AP owns and
++     * publishes the shared rings; resetting them here corrupts its state. */
++    int ipc_ready = ipc_mem_validate() == IPC_ERR_OK;
++    LISA_LOGI(TAG, "ListenAI %s: SDK-initialized IPC, shared layout valid=%u",
++              SDK_VERSION_STRING, (unsigned)ipc_ready);
++#else
+     ipc_mem_init(1);
+     int ipc_ready = ipc_master_init(&ipc_cb) == 0;
++#endif
+ 
+     plat_boot_stage("shell");
+     lisa_shell_init();
+diff --git a/arcs/platform/arcs/sys_cmds.c b/arcs/platform/arcs/sys_cmds.c
+index 9836694..07e9371 100644
+--- a/arcs/platform/arcs/sys_cmds.c
++++ b/arcs/platform/arcs/sys_cmds.c
+@@ -16,6 +16,7 @@
+ #define KV_BOOT_HANG "debug.boot_hang"
+ 
+ #include "platform_arcs.h"
++#include "sdk_version.h"
+ 
+ static int reboot_cmd(int argc, char **argv)
+ {
+@@ -53,6 +54,7 @@ static int version_cmd(int argc, char **argv)
+ {
+     (void)argc; (void)argv;
+     shellPrint(shellGetCurrent(), "impo-gadget-arcs %s\n", plat_firmware_version());
++    shellPrint(shellGetCurrent(), "ListenAI ARCS SDK %s\n", SDK_VERSION_STRING);
+     return 0;
+ }
+ SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0) | SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN) | SHELL_CMD_DISABLE_RETURN,

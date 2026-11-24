@@ -1,8 +1,8 @@
 # Impo ARCS Mini SDK 0.1.0
 
-本 SDK 面向与当前云宝相同接线的 Arcs-Mini2：LS26、240×240 ST7789P3 屏幕、PB04 主功能键、PA01 扬声器功放、左声道麦克风。产品名称、平台产品 ID、对话说明、连续对话和唤醒资源由产品配置决定。`arcs_mini_yunbao` 是保留的硬件构建标识，不再决定产品名称或唤醒词。
+本 SDK 面向与当前云宝相同接线的 Arcs-Mini2：LS26、240×240 ST7789P3 屏幕、PB04 主功能键、PA01 扬声器功放、左声道麦克风。产品名称、平台产品 ID、对话说明、连续对话和唤醒资源由产品配置决定。`arcs_mini_yunbao` 是保留的硬件构建标识，不再决定产品名称或唤醒词。同款硬件共用源码；保留原机 AP 时按其运行时选择聆思 0.1.6 或 0.1.8 构建，不承诺同一个二进制跨版本通刷。
 
-官方 ESP32 也以 [Device SDK](https://github.com/impoai/impo-gadget-sdk/tree/main/esp32) 名义交付完整固件、通用组件、板级描述和构建配置。本项目沿用该组织方式，继续调用固定官方 SDK 的配对、Noise、语音和国内路由代码。它是社区 ARCS 适配 SDK，依赖开发者另行提供的 ListenAI SDK 0.1.6；不是一个脱离这些依赖的二进制库。
+官方 ESP32 也以 [Device SDK](https://github.com/impoai/impo-gadget-sdk/tree/main/esp32) 名义交付完整固件、通用组件、板级描述和构建配置。本项目沿用该组织方式，继续调用固定官方 SDK 的配对、Noise、语音和国内路由代码。它是社区 ARCS 适配 SDK，依赖开发者另行提供的 ListenAI SDK；不是一个脱离这些依赖的二进制库。
 
 ## 目录与接口
 
@@ -35,6 +35,26 @@ python3 tools/build.py --docker --product products/yunbao.json
 ```
 
 产物：`upstream/arcs/build-yunbao/impo-gadget.bin`。生成的产品头文件、字体、Kconfig 和元数据在 `upstream/arcs/products/yunbao/`。构建不会自动烧录设备。构建器检查生成归档的格式，发现损坏时仅删除当前构建目录中的相关产物并重建；一次执行最多额外重建一次，仍失败则停止。
+
+### 保留 0.1.8 AP 的同款设备
+
+`0.1.6` / `0.1.8` 指聆思芯片 SDK，和 Impo SDK、原机应用的 `3.x` 版本分别记录。先读原机 AP 的版本及模型摘要，再显式选择构建目标。已提供通用名称“Arcs Mini 2”、原机“小聆小聆”模型的独立产品配置：
+
+```sh
+export ARCS_BASE=/path/to/listenai-arcs-sdk-0.1.8
+python3 tools/build.py --docker --arcs-sdk-version 0.1.8 \
+  --product products/arcs-mini2-xiaoling.json
+```
+
+产物独立存放于 `upstream/arcs/build-arcs-mini2-xiaoling-arcs018/`，附 `impo-sdk-build.json` 记录底层版本、产品和镜像摘要。默认构建仍选择 0.1.6；`ARCS_BASE` 与显式版本不符时在准备源码前拒绝。0.1.8 使用聆思自动初始化的双核通信，0.1.6 保留旧初始化；不复制协议库，也不把一个版本的预编译归档放进另一个版本。源码树来源见 `dependencies.lock.json`。
+
+已核对的 0.1.8 AP 还要求 CP 在镜像 `0x180` 声明 PSRAM 区间。本板配置为 `0x28800000 + 0x00800000`，由实际构建配置生成、底层链接器固定位置，构建器再次核验。缺少这两个字段时，AP 会显示固件不匹配并在约 10 秒后关机，CP 尚未运行。不能只核对标准 ARCS 头或 SDK 版本号；AP 的内存和 IPC 契约仍须与原机匹配。修正声明不改写 AP，也不关闭它的兼容检查。
+
+Boot 1.1.9 还会保留旧 AP 看门狗。0.1.8 组件在最早的系统初始化阶段补回 0.1.6 的接管行为，按当前配置关闭该旧看门狗；Impo 的 `wdt0` 硬件看门狗及任务监控继续工作。启动日志报告旧 AP 看门狗接管前后的控制值和启用位，避免把写入校验通过当作持续运行通过。
+
+屏幕标题默认取 `display_name`，也可用 `screen_title` 单独设置；平台名称、型号和节点前缀同样由产品 JSON 生成。板级 overlay 不再设置产品身份。“云宝”只作为 `products/yunbao.json` 示例名称，底层目录名 `arcs_mini_yunbao` 是历史硬件标识，不决定设备名称。当前 Mini2 示例使用 “Arcs Mini 2” 和“小聆小聆”，名称与唤醒词相互独立。
+
+`products/arcs-mini2-xiaoling.json` 只接受清单中精确匹配的原机模型和 wrap；并非所有标为“小聆小聆”的模型都具有相同字节。原机资源摘要不同则须重新生成资源描述。启动、联网、屏幕和唤醒听测的实际验收边界见 `VALIDATION.md`。
 
 ## 新建同款硬件产品
 

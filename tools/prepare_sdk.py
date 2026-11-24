@@ -56,14 +56,18 @@ def prepare(sdk, product=DEFAULT_PRODUCT, font=None):
         env = dict(os.environ, GIT_INDEX_FILE=str(Path(temp) / "index"))
         git = ["git", "-C", str(sdk)]
         subprocess.run([*git, "read-tree", "HEAD"], env=env, check=True)
+        trees = [subprocess.check_output([*git, "write-tree"], env=env, text=True).strip()]
         for patch in patches:
             subprocess.run([*git, "apply", "--cached", str(patch)], env=env, check=True)
-        expected_tree = subprocess.check_output([*git, "write-tree"], env=env, text=True).strip()
-    if subprocess.run([*git, "diff", "--quiet", expected_tree, "--", "arcs", "esp32"]).returncode:
-        if subprocess.run([*git, "diff", "--quiet", "HEAD", "--", "arcs", "esp32"]).returncode:
-            raise SystemExit("SDK changes differ from this project's patches; inspect before building")
-        for patch in patches:
-            subprocess.run([*git, "apply", str(patch)], check=True)
+            trees.append(subprocess.check_output([*git, "write-tree"], env=env, text=True).strip())
+    # A previous public release can advance from an exact reviewed prefix.
+    # Any unrelated tracked edits still stop the installer before mutation.
+    matched = next((n for n in range(len(trees)-1, -1, -1)
+                    if subprocess.run([*git, "diff", "--quiet", trees[n], "--", "arcs", "esp32"]).returncode == 0), None)
+    if matched is None:
+        raise SystemExit("SDK changes differ from this project's patches; inspect before building")
+    for patch in patches[matched:]:
+        subprocess.run([*git, "apply", str(patch)], check=True)
     files = {}
     for source, dest in [(ROOT / "firmware/boards/arcs_mini_yunbao", "arcs/boards/arcs_mini_yunbao"),
                          (ROOT / "sdk", "arcs/components/impo_arcs_mini")]:

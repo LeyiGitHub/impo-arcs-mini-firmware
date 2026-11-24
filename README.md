@@ -7,6 +7,7 @@
 ## 复用方式
 
 - 默认云宝：`python3 tools/build.py --docker --product products/yunbao.json`。
+- 保留聆思 0.1.8 AP、原机“小聆小聆”模型的同款设备：提供对应 `ARCS_BASE`，使用 `--arcs-sdk-version 0.1.8 --product products/arcs-mini2-xiaoling.json`。
 - 同硬件新产品：复制 `examples/button_companion/`，修改 JSON 与应用组件，通过 `--product` 和 `--app-dir` 构建。
 - 不同唤醒词：引用目标词对应的模型清单，SDK 校验设备现有资源后启用；关闭唤醒时可独立使用按键对话。仅修改文本不会改变声学模型。
 - C/C++ 应用入口：`sdk/include/impo_arcs_mini.h`；SDK 继续管理启动、配对和语音主流程。
@@ -41,7 +42,7 @@ export ARCS_BASE=/path/to/listenai-arcs-sdk-0.1.6
 python3 tools/build.py --docker
 ```
 
-需要 Python 3、Git、Docker 和你有权使用的 ListenAI ARCS SDK **0.1.6**。SDK 0.1.8 的 IPC API 不兼容；构建工具会拒绝混用。工具链镜像和 Impo SDK 提交固定于 `dependencies.lock.json`。不分发 ListenAI SDK、AP、boot、唤醒资源和原机闪存。
+需要 Python 3、Git、Docker 和你有权使用的 ListenAI ARCS SDK。默认使用 **0.1.6**；保留原机 0.1.8 AP 时显式选择 `--arcs-sdk-version 0.1.8`，SDK 使用对应的双核初始化及唤醒 API。源码共用，构建目录按底层版本分开；构建工具拒绝声明版本与 `ARCS_BASE` 不符。工具链镜像、Impo SDK 提交和聆思源码树记录于 `dependencies.lock.json`。不分发 ListenAI SDK、AP、boot、唤醒资源和原机闪存。
 
 macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker`。默认输出为 `upstream/arcs/build-yunbao/impo-gadget.bin`；其他产品输出到 `upstream/arcs/build-<产品 id>/`。宿主需要 Python 3.9+。
 

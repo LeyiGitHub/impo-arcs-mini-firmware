@@ -1,0 +1,23 @@
+diff --git a/arcs/app/Kconfig b/arcs/app/Kconfig
+--- a/arcs/app/Kconfig
++++ b/arcs/app/Kconfig
+@@ -3,6 +3,19 @@ rsource "../../esp32/components/impo_cloud_route/Kconfig"
+ 
+ menu "Impo Gadget"
+ 
++config CP_FIRMWARE_COMPAT
++	bool "Embed CP PSRAM range required by the retained AP"
++	default n
++	help
++	  Enable for the reviewed ListenAI 0.1.8 AP profile. The AP checks
++	  these words before releasing CP. They describe the actual memory
++	  configuration; they must never bypass a hardware compatibility check.
++
++config CP_FIRMWARE_COMPAT_OFFSET
++	hex
++	default 0x180
++	depends on CP_FIRMWARE_COMPAT
++
+ config GADGET_WIFI_SSID
+ 	string "Development Wi-Fi SSID"
+ 	default ""

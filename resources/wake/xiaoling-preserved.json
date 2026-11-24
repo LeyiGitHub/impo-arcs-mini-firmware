@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "xiaoling-original-single-mic",
+  "label": "小聆小聆",
+  "keywords": ["xiao3 ling2 xiao3 ling2", "小聆小聆"],
+  "model": {"file": "cae_esr.bin", "sha256": "bbad81dbea270ccd58835db3970aad61a5e73b70ad8c585f9671f19678cbe4b0"},
+  "wrap": {"file": "wrap.json", "sha256": "2243c6f2012e96ec0fdd3a39ce66a4a3044aad43597bd0882f513745dca875a6"}
+}

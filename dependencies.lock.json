@@ -9,5 +9,14 @@
     "note": "Provide ARCS_BASE from your licensed ListenAI SDK installation.",
     "source_tree": "6781fe0734c8f3e5807b653e46bf528d0f593660"
   },
+  "arcs_sdk_profiles": {
+    "0.1.6": {"source_tree": "6781fe0734c8f3e5807b653e46bf528d0f593660"},
+    "0.1.8": {
+      "source_tree": "bc1cd1e67daca666e2ee27cb3bd79565ae8dc40f",
+      "source_repository": "https://github.com/LISTENAI/arcs_mini",
+      "source_commit": "76ce8f9bd6301ea4b379a25297c57fa02833393f",
+      "source_subdirectory": "arcs-sdk"
+    }
+  },
   "builder_image": "ghcr.io/listenai/arcs-builder@sha256:90b0f14ce44790505601c452fe9146e043e308f91ad2ce692a46a9cf1111981a"
 }

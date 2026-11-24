@@ -2,6 +2,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 python3 tests/test_product.py
+python3 tests/test_arcs_sdk.py
 output=$(mktemp -d)
 trap 'rm -rf "$output"' EXIT
 python3 tools/prepare_sdk.py --product examples/button_companion/product.json
