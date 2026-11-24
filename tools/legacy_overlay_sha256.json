@@ -1,0 +1,22 @@
+{
+  "arcs/boards/arcs_mini_yunbao/CMakeLists.txt": "59f83a6bc3853b69269458eaed04abca9884e8b4afe5bed016f0baea137b9f0e",
+  "arcs/boards/arcs_mini_yunbao/Kconfig": "7f4045bf65be7393d96c658d2c219b13f5e9f7246ecf6be39fab76ef344c4ccf",
+  "arcs/boards/arcs_mini_yunbao/board.c": "07fb19d1401591d2ab6518d7532cad70deda4a3209e951363eae496bbf6b23e5",
+  "arcs/boards/arcs_mini_yunbao/board.h": "3414066c883457dc2496708e7e8f3a783db7f9a4358a961711838831a8cdbea0",
+  "arcs/boards/arcs_mini_yunbao/gadget/CMakeLists.txt": "8eee705e5bfa6216bb9d74ccd618f1ac705fa6c10f348741a2b7aa4aee5a3847",
+  "arcs/boards/arcs_mini_yunbao/gadget/board_yunbao.c": "cce11c89816b06fd2fca5e2b1222d54fcfb4ead768d95a84c88ba50033b48a67",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_button.c": "f54d578895981a85f54e8a6ba451065a176a4cd1e368ec64dbab2327aaaf026e",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_button.h": "0a63208deb5c333d44905bab482d8a4c4d056aabe31f5bb232d16f7d22da2bf2",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_display.c": "224e5f40c50ee3f8239567ea4acfe3b95c059ddc6e7fe537651d3d7fedecbd29",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_display.h": "eeac5378473858eb7822b6e582886e82eb813d73e7d38b70680138930f5301ed",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_font.h": "e8f8f19adb3ca0d4908977c2b1ba5466da907a3ea815fce1d365ef0547401b8d",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_screen_ui.c": "0c02192d32c7ee64b233113ae77b60170f4a8b9c706d5b30c062badb7490faac",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_screen_ui.h": "e8f89c5dd54d15dd1a7cffecd792153577c87df8e31843a4dc0fd64456817fdb",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_wake.c": "b3b9695f55d653817458abf7e5aeb808213c506a37719868052e5143e6310126",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_wake.h": "5ee7a70df248513704f4fd3108cb76452a1a89d78ade8723d662d37fe3505e96",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_wake_resources.c": "84be913bb1c277603d9045301cb0385498caa41a50ff5adb7ecf29f5e4ce86da",
+  "arcs/boards/arcs_mini_yunbao/gadget/yunbao_wake_resources.h": "89dc73481526d0194ebcc04d47d9c50c760354cacee7012ac43c1865ec7549c9",
+  "arcs/boards/arcs_mini_yunbao/overlay.conf": "a6cc469ea93d30d7c563ff9bafdbac05303547b6cbb0e6054446f9e888e8b580",
+  "arcs/boards/arcs_mini_yunbao/pinmux.c": "eb7ed216779f4ef8a7df39c30a2e5065aec5affab418f91726daece16688b25d",
+  "arcs/boards/arcs_mini_yunbao/pinmux.h": "87adcc9d91f72758ce4c9e6dd36664204da07babbadbd94111c01ec7f0d35bd2"
+}

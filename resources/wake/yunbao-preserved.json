@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "id": "yunbao-original-single-mic",
+  "label": "你好云宝",
+  "keywords": ["ni3 hao3 yun2 bao3", "你好云宝"],
+  "model": {"file": "cae_esr.bin", "sha256": "ee8a6a479e028aef2fa361c9ad30ac60f51d4ad7cad08cd63646442b6a9f9283"},
+  "wrap": {"file": "wrap.json", "sha256": "ea480eb93e7c9c97365fdff5f02311c3e183bce544a2457e4e10c4954c1b2fad"}
+}

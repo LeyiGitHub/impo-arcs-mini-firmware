@@ -1,10 +1,28 @@
-# IMPO + ARCS Mini 固件
+# IMPO + ARCS Mini SDK
 
-基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的云宝语音盒子固件工程。设备使用官方 BLE 配对、Noise 链路、设备命令和语音回合，默认启用官方国内路由：大陆网络自动选择 `gadget.itoy.cn:9443`，TLS 仍与 `gadgets.impo.ai` 建立；其他地区或国内线路连续失败时按官方策略直连。不依赖原来的 Mac / ACK / LifeLike 桥接服务。详见 [国内连接](docs/CHINA_ROUTE.md)。
+基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的可复用 Arcs-Mini2 设备 SDK，包含公共 C/C++ 接口、产品配置、应用扩展和云宝参考固件。设备使用官方 BLE 配对、Noise 链路、设备命令和语音回合，默认启用官方国内路由：大陆网络自动选择 `gadget.itoy.cn:9443`，TLS 仍与 `gadgets.impo.ai` 建立；其他地区或国内线路连续失败时按官方策略直连。不依赖原来的 Mac / ACK / LifeLike 桥接服务。详见 [国内连接](docs/CHINA_ROUTE.md)。
 
-这是独立的社区适配仓库。官方 SDK 按 `dependencies.lock.json` 固定到 `0b83ffb70dfbd7e1986b1e7746259335af8030f0`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话、选网优先级及国内路由兼容层；共享链路、路由和语音代码不另写一份。
+这是独立的社区适配仓库。SDK 版本 **0.1.0**，面向与当前云宝相同接线的设备；不同产品通过 JSON 配置名称、平台产品 ID、连续对话和唤醒资源。接入、示例及资源约束见 [SDK 使用指南](docs/SDK.md)。官方 SDK 按 `dependencies.lock.json` 固定到 `0b83ffb70dfbd7e1986b1e7746259335af8030f0`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话、选网优先级及国内路由兼容层；共享链路、路由和语音代码不另写一份。
+
+## 复用方式
+
+- 默认云宝：`python3 tools/build.py --docker --product products/yunbao.json`。
+- 同硬件新产品：复制 `examples/button_companion/`，修改 JSON 与应用组件，通过 `--product` 和 `--app-dir` 构建。
+- 不同唤醒词：引用目标词对应的模型清单，SDK 校验设备现有资源后启用；关闭唤醒时可独立使用按键对话。仅修改文本不会改变声学模型。
+- C/C++ 应用入口：`sdk/include/impo_arcs_mini.h`；SDK 继续管理启动、配对和语音主流程。
+- `python3 tools/package_sdk.py` 可导出固定提交的源码包，不包含 ListenAI SDK、模型或设备数据。
+
+完整示例命令：
+
+```sh
+python3 tools/build.py --docker \
+  --product examples/button_companion/product.json \
+  --app-dir examples/button_companion
+```
 
 ## 当前状态
+
+- SDK 0.1.0 重构通过主机检查、C/C++ 接口检查及默认产品/独立应用示例的完整编译。重构镜像本次未刷入设备，下述实物验收属于此前已验证的固件；详见 [验收记录](docs/VALIDATION.md)。
 
 - 2026-11-24 已升级到官方国内路由与 TLS 透传版本，完整主机回归及交叉编译通过；云宝 CP 写入与独立读回通过，其他分区逐字节不变。启动栈修正后，屏幕、语音及连续对话已获人工确认；实机识别大陆后因国内业务 TLS 连续被重置，按官方策略回退直连。国内中继业务链路尚未通过。详见 [国内连接](docs/CHINA_ROUTE.md)。
 - 云宝板级目标已实现：扬声器功放 PA01、左声道麦克风、PB04 按键。
@@ -25,11 +43,11 @@ python3 tools/build.py --docker
 
 需要 Python 3、Git、Docker 和你有权使用的 ListenAI ARCS SDK **0.1.6**。SDK 0.1.8 的 IPC API 不兼容；构建工具会拒绝混用。工具链镜像和 Impo SDK 提交固定于 `dependencies.lock.json`。不分发 ListenAI SDK、AP、boot、唤醒资源和原机闪存。
 
-macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker`。输出为 `upstream/arcs/build-yunbao/impo-gadget.bin`。
+macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker`。默认输出为 `upstream/arcs/build-yunbao/impo-gadget.bin`；其他产品输出到 `upstream/arcs/build-<产品 id>/`。宿主需要 Python 3.9+。
 
 ## 配对与使用
 
-先核实板型、备份完整闪存，按 [刷写和恢复说明](docs/FLASHING.md) 只更新 CP 应用。接着在 Impo 的设备设置打开开发者模式，通过 BLE 添加 `ImpoGadget-XXXXXX`。SSID、密码和设备凭据通过官方配对保存到设备；公开固件不内置凭据。配对后可说“你好云宝”或短按 PB04 电源键启动对话；提示音后说话，停顿后由 Impo 处理并通过盒子扬声器回复。回答结束、再次提示收音后可继续说下一句，静音约 5 秒或短按退出。已通过真实问答与完整听测，包括屏幕版在手机热点上的一次问答；原网络仍出现 TLS 写超时、语音下载停顿和重连问题，尚不能作为稳定可用固件。
+先核实板型、备份完整闪存，按 [刷写和恢复说明](docs/FLASHING.md) 只更新 CP 应用。接着在 Impo 的设备设置打开开发者模式，通过 BLE 添加 `ImpoGadget-XXXXXX`。SSID、密码和设备凭据通过官方配对保存到设备；公开固件不内置凭据。默认云宝产品配对后可说“你好云宝”或短按 PB04 主功能键启动对话；提示音后说话，停顿后由 Impo 处理并通过盒子扬声器回复。回答结束、再次提示收音后可继续说下一句，静音约 5 秒或短按退出。已通过真实问答与完整听测，包括屏幕版在手机热点上的一次问答；原网络仍出现 TLS 写超时、语音下载停顿和重连问题，尚不能作为稳定可用固件。
 
 成功配网或通过原生 `wifi connect` 手动连接后，会保存该网络的优先选择；重启先尝试它，失败时再回退到 SDK 已保存网络的自动选择。密码仍由官方 Wi-Fi 管理器保存，不内置于源码。
 

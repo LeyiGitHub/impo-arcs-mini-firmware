@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: MIT */
 #include <stddef.h>
 #include "yunbao_screen_ui.h"
-#include "yunbao_font.h"
+#include "impo_product_font.h"
+#include "impo_product_config.h"
 
 #define RGB(r,g,b) ((uint16_t)(((r)>>3)<<11 | ((g)>>2)<<5 | ((b)>>3)))
 #define BG RGB(8,16,24)
@@ -66,7 +67,7 @@ bool yunbao_screen_render(uint16_t *p, unsigned width, unsigned height,
     if (test) {
         const uint16_t colors[] = {0xf800, 0x07e0, 0x001f, 0xffff};
         for (int i = 0; i < 4; i++) rect(p, i*60, 60, 60, 100, colors[i]);
-        text(p, "云宝", 15, WHITE); text(p, "IMPO", 190, WHITE);
+        text(p, IMPO_SCREEN_TITLE, 15, WHITE); text(p, "IMPO", 190, WHITE);
         rect(p, 0, 0, 240, 2, WHITE); rect(p, 0, 238, 240, 2, WHITE);
         rect(p, 0, 0, 2, 240, WHITE); rect(p, 238, 0, 2, 240, WHITE);
         return true;
@@ -81,7 +82,7 @@ bool yunbao_screen_render(uint16_t *p, unsigned width, unsigned height,
     uint16_t accent = warn ? AMBER : st == GADGET_STATUS_SPEAKING ? GREEN : CYAN;
     bool blink = ms % 5000 >= 4800;
     int look = st == GADGET_STATUS_THINKING ? ((int)((ms/500)%3)-1)*5 : 0;
-    text(p, "云宝", 14, WHITE);
+    text(p, IMPO_SCREEN_TITLE, 14, WHITE);
     for (int eye = 0; eye < 2; eye++) {
         int x = eye ? 165 : 75;
         if (blink || st == GADGET_STATUS_OFFLINE) {
@@ -104,6 +105,6 @@ bool yunbao_screen_render(uint16_t *p, unsigned width, unsigned height,
     }
     text(p, labels[st], 169, WHITE);
     rect(p, 48, 202, 144, 1, RGB(32,52,66));
-    text(p, dialogue_active ? "短按结束" : wake_available ? "你好云宝" : "短按说话", 210, MUTED);
+    text(p, dialogue_active ? "短按结束" : wake_available ? IMPO_WAKE_LABEL : "短按说话", 210, MUTED);
     return true;
 }

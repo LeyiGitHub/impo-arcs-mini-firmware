@@ -11,9 +11,15 @@ G=upstream/arcs/gadget
   tests/test_voice_capture.c "$G/gadget_voice_logic.c" "$G/gadget_pcm.c" "$J/cJSON.c" -lm -o "$output/voice"
 "$output/voice"
 B=firmware/boards/arcs_mini_yunbao/gadget
-"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$J" -I"$B" \
-  tests/test_wake_resources.c "$B/yunbao_wake_resources.c" "$J/cJSON.c" -lm -o "$output/wake"
-"$output/wake"
+M=$ARCS_BASE/soc/arcs/hal/chip/arcs/mbedtls/mbedtls-2.28.9
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests -DMBEDTLS_CONFIG_FILE='"host_sha256_config.h"' -I"$J" -Isdk/include -I"$M/include" \
+  tests/test_wake_resources.c sdk/src/impo_arcs_wake_resources.c "$J/cJSON.c" "$M/library/sha256.c" \
+  "$M/library/platform_util.c" -lm -o "$output/wake"
+if [ -n "${WAKE_FLASH_BACKUP:-}" ]; then
+    "$output/wake" "$WAKE_FLASH_BACKUP"
+else
+    "$output/wake"
+fi
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/audio_stubs \
   tests/test_mic_ownership.c -o "$output/mic"
 "$output/mic"

@@ -15,7 +15,7 @@
 #include "gadget_sound.h"
 #include "shell.h"
 #include "yunbao_wake.h"
-#include "yunbao_wake_resources.h"
+#include "impo_arcs_mini.h"
 #define TAG "yunbao_wake"
 #include "lisa_log.h"
 #define FLASH_ROMFS ((const uint8_t *)0x30200000u)
@@ -50,8 +50,8 @@ static void event_cb(uint32_t event, void *data, uint32_t len, void *priv)
 }
 static int engine_init(void)
 {
-    yunbao_wake_resources_t r;
-    if (!yunbao_wake_resources(FLASH_ROMFS,ROMFS_CAPACITY,&r)) return -100;
+    impo_arcs_wake_resources_t r;
+    if (!impo_arcs_wake_resources(FLASH_ROMFS,ROMFS_CAPACITY,&impo_arcs_mini_product()->wake,&r)) return -100;
     LISA_LOGI(TAG,"preserved resources: model +%x %u bytes, wrap +%x %u bytes",r.model_offset,r.model_size,r.wrap_offset,r.wrap_size);
     acomp_init();
     int e=acomp_wakeup_init();
@@ -87,7 +87,7 @@ static void wake_task(void *arg)
     }
     s_ready=true;
     gadget_voice_set_wakeup_available(true);
-    LISA_LOGI(TAG,"ready: ni3 hao3 yun2 bao3, continuous dialogue enabled");
+    LISA_LOGI(TAG,"ready: %s, continuous dialogue=%u",impo_arcs_mini_product()->wake.label,(unsigned)impo_arcs_mini_product()->continuous_dialogue);
     uint32_t quiet_at=(uint32_t)plat_uptime_ms();
     bool was_quiet=false, attached=true;
     int16_t frame[SAMPLES];
@@ -118,7 +118,7 @@ static void wake_task(void *arg)
         s_listening=q && now-quiet_at>=500;
         wake_event_t ev;
         while (xQueueReceive(s_events,&ev,0)==pdTRUE) {
-            if (s_listening && quiet() && yunbao_wake_result(ev.json)) {
+            if (s_listening && quiet() && impo_arcs_wake_result(ev.json,&impo_arcs_mini_product()->wake)) {
                 s_hits++; s_listening=false; was_quiet=false;
                 LISA_LOGI(TAG,"wake accepted #%u",(unsigned)s_hits);
                 gadget_voice_wake();
@@ -144,6 +144,7 @@ static void wake_task(void *arg)
 }
 int yunbao_wake_start(void)
 {
+    if (!impo_arcs_mini_product()->wake.enabled) { s_enabled=false; return 0; }
     s_audio=xStreamBufferCreate(8192,2);
     s_events=xQueueCreate(2,sizeof(wake_event_t));
     if (!s_audio || !s_events || xTaskCreate(wake_task,"yunbao_wake",4096/sizeof(StackType_t),NULL,3,NULL)!=pdPASS) {
@@ -151,13 +152,18 @@ int yunbao_wake_start(void)
     }
     return 0;
 }
+int yunbao_wake_set_enabled(bool enabled)
+{
+    if (enabled && (!impo_arcs_mini_product()->wake.enabled || !s_ready)) return -1;
+    s_enabled=enabled; return 0;
+}
 static int wake_cmd(int argc,char **argv)
 {
-    if (argc==2 && !strcmp(argv[1],"off")) s_enabled=false;
-    if (argc==2 && !strcmp(argv[1],"on")) s_enabled=true;
-    shellPrint(shellGetCurrent(),"wake ready=%u enabled=%u listening=%u frames=%u dropped=%u hits=%u error=%d dialogue=%u word=ni3 hao3 yun2 bao3\n",
+    if (argc==2 && !strcmp(argv[1],"off")) yunbao_wake_set_enabled(false);
+    if (argc==2 && !strcmp(argv[1],"on")) yunbao_wake_set_enabled(true);
+    shellPrint(shellGetCurrent(),"wake ready=%u enabled=%u listening=%u frames=%u dropped=%u hits=%u error=%d dialogue=%u word=%s\n",
         (unsigned)s_ready,(unsigned)s_enabled,(unsigned)s_listening,(unsigned)s_frames,(unsigned)s_drops,
-        (unsigned)s_hits,s_error,(unsigned)gadget_voice_continuous_active());
+        (unsigned)s_hits,s_error,(unsigned)gadget_voice_continuous_active(),impo_arcs_mini_product()->wake.label);
     return 0;
 }
 SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0)|SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN)|SHELL_CMD_DISABLE_RETURN,

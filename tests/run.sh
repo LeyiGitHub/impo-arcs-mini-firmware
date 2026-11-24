@@ -8,7 +8,7 @@ board=firmware/boards/arcs_mini_yunbao/gadget
 "$output/button"
 python3 tools/prepare_sdk.py
 gadget=upstream/arcs/gadget
-"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/audio_stubs -I"$gadget" -I"$board" \
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/audio_stubs -I"$gadget" -I"$board" -Iupstream/arcs/products/yunbao \
   tests/test_yunbao_screen.c "$board/yunbao_screen_ui.c" -o "$output/screen"
 "$output/screen"
 # Expose the SDK's M_PI constant from glibc in the C11 host audio build.
@@ -17,6 +17,7 @@ gadget=upstream/arcs/gadget
 "$output/sound"
 sh tests/run_wifi.sh
 sh tests/run_cloud.sh
+sh tests/run_sdk.sh
 python3 -m py_compile tools/prepare_sdk.py tools/build.py tools/check_image.py tools/gen_manifest.py tools/gen_screen_font.py
 if [ -n "${ARCS_BASE:-}" ]; then
     sh tests/run_tls.sh

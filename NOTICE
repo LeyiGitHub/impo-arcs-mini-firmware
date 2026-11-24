@@ -1,10 +1,12 @@
 This project extends impoai/impo-gadget-sdk (MIT and Apache-2.0).
 The upstream SDK is fetched at a pinned revision; its LICENSE, LICENSE-APACHE and NOTICE remain authoritative.
 The board.h and CMakeLists.txt board scaffolding retain ListenAI's Apache-2.0 notices.
-New Yunbao board logic and project tooling are licensed under the MIT License.
+New SDK component, Yunbao board logic and project tooling are licensed under the MIT License.
 Yunbao Status 24 bitmap glyphs derive from Noto Sans SC (Google Fonts),
 Copyright 2014-2021 Adobe, with Reserved Font Name 'Source'. The glyph data
 remains under SIL Open Font License 1.1; see LICENSE-OFL. The original font
 is not redistributed. tools/gen_screen_font.py records its SHA256.
+Font source: https://github.com/google/fonts/blob/2894aab31764f10f29c421bdfd2340d3b382d384/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf
+The expanded SDK bitmap subset is in sdk/assets/status_font.h.
 ListenAI ARCS SDK 0.1.6, AP/boot/resource images and device credentials are not redistributed.
 This is an independent community integration, not an official Impo or ListenAI product.

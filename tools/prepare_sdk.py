@@ -1,10 +1,46 @@
 #!/usr/bin/env python3
 """Apply reviewed SDK patches, board files and public defaults to the pinned SDK."""
-import argparse, json, os, shutil, subprocess, tempfile
+import argparse, json, os, subprocess, tempfile
+import hashlib
 from pathlib import Path
+from product import DEFAULT_PRODUCT, load_product, generated_files
 ROOT = Path(__file__).resolve().parents[1]
-def prepare(sdk):
+
+def install_managed(sdk, files):
+    """Update our own overlays, refusing changes made outside this installer."""
+    state_file = sdk / ".impo-arcs-mini-managed.json"
+    state = json.loads(state_file.read_text()) if state_file.exists() else {}
+    legacy = json.loads((ROOT / "tools/legacy_overlay_sha256.json").read_text())
+    digest = lambda data: hashlib.sha256(data).hexdigest()
+    for name, data in files.items():
+        target = sdk / name
+        if target.exists() and target.read_bytes() != data:
+            old = digest(target.read_bytes())
+            if state.get(name) != old:
+                # Known public pre-SDK overlays can migrate without a Git
+                # history (including source ZIP users); arbitrary edits cannot.
+                if legacy.get(name) != old:
+                    raise SystemExit("Managed SDK overlay has local changes: " + str(target))
+    for name, data in files.items():
+        target = sdk / name
+        if not target.exists() or target.read_bytes() != data:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        state[name] = digest(data)
+    # Old board-local parser moved into the public SDK component.
+    for leaf in ["yunbao_wake_resources.c", "yunbao_wake_resources.h"]:
+        target = sdk / "arcs/boards/arcs_mini_yunbao/gadget" / leaf
+        if target.exists():
+            name = str(target.relative_to(sdk))
+            if digest(target.read_bytes()) == legacy.get(name):
+                target.unlink()
+                state.pop(name, None)
+    state_file.write_text(json.dumps(state, sort_keys=True, indent=2) + "\n")
+
+def prepare(sdk, product=DEFAULT_PRODUCT, font=None):
     sdk = sdk.resolve()
+    profile = load_product(product)
+    generated = generated_files(profile, font)
     expected = json.loads((ROOT / "dependencies.lock.json").read_text())["impo_gadget_sdk"]["commit"]
     if not sdk.exists():
         subprocess.run(["git", "init", str(sdk)], check=True)
@@ -28,28 +64,19 @@ def prepare(sdk):
             raise SystemExit("SDK changes differ from this project's patches; inspect before building")
         for patch in patches:
             subprocess.run([*git, "apply", str(patch)], check=True)
-    source = ROOT / "firmware/boards/arcs_mini_yunbao"
-    dest = sdk / "arcs/boards/arcs_mini_yunbao"
-    for file in source.rglob("*"):
-        if file.is_file():
-            target = dest / file.relative_to(source)
-            if target.exists() and target.read_bytes() != file.read_bytes():
-                raise SystemExit("Board destination has local changes: " + str(target))
-    # Do not touch identical CMake/config inputs: that needlessly regenerates
-    # autoconf and rebuilds the complete SDK on every test/build invocation.
-    for file in source.rglob("*"):
-        if file.is_file():
-            target = dest / file.relative_to(source)
-            if not target.exists():
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(file, target)
-    conf = sdk / "arcs/app/yunbao.conf"
-    data = (ROOT / "configs/yunbao.conf").read_bytes()
-    if conf.exists() and conf.read_bytes() != data:
-        raise SystemExit("Public build config has local changes: " + str(conf))
-    if not conf.exists():
-        conf.write_bytes(data)
+    files = {}
+    for source, dest in [(ROOT / "firmware/boards/arcs_mini_yunbao", "arcs/boards/arcs_mini_yunbao"),
+                         (ROOT / "sdk", "arcs/components/impo_arcs_mini")]:
+        for file in source.rglob("*"):
+            if file.is_file():
+                files[str(Path(dest) / file.relative_to(source))] = file.read_bytes()
+    for name, data in generated.items():
+        files[f"arcs/products/{profile['id']}/{name}"] = data
+    install_managed(sdk, files)
     return sdk
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--sdk", type=Path, default=ROOT / "upstream")
-    print(prepare(ap.parse_args().sdk))
+    ap.add_argument("--product", type=Path, default=DEFAULT_PRODUCT)
+    ap.add_argument("--font", type=Path)
+    a = ap.parse_args()
+    print(prepare(a.sdk, a.product, a.font))

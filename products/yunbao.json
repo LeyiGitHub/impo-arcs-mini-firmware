@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "yunbao",
+  "display_name": "云宝",
+  "model_id": "arcs-mini-yunbao",
+  "node_prefix": "yunbao",
+  "product_id": null,
+  "continuous_dialogue": true,
+  "china_relay": true,
+  "wake": {"enabled": true, "bundle": "../resources/wake/yunbao-preserved.json"}
+}

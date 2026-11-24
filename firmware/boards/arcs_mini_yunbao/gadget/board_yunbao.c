@@ -12,6 +12,8 @@
 #include "yunbao_display.h"
 #include "yunbao_wake.h"
 #include "gadget_voice.h"
+#include "impo_arcs_mini.h"
+#include "impo_product_config.h"
 
 static lisa_device_t *s_amp, *s_gpio;
 static yunbao_button_t s_button;
@@ -28,9 +30,16 @@ static int init(void)
     lisa_gpio_configure(s_gpio, POWER_KEY_PIN, LISA_GPIO_CONFIG_INPUT_PULLUP);
     /* A screen failure must not prevent the independent voice path from starting. */
     yunbao_display_start();
-    gadget_voice_set_continuous(true);
+    gadget_voice_set_continuous(impo_arcs_mini_product()->continuous_dialogue);
     yunbao_wake_start();
-    return 0;
+    const impo_arcs_mini_application_t *app=impo_arcs_mini_application();
+    return app && app->on_init ? app->on_init() : 0;
+}
+static void show_status(gadget_status_t status)
+{
+    yunbao_display_show(status);
+    const impo_arcs_mini_application_t *app=impo_arcs_mini_application();
+    if (app && app->on_status) app->on_status(status);
 }
 static unsigned poll_buttons(void)
 {
@@ -44,26 +53,33 @@ static int read_power(gadget_power_t *out)
     return 0; /* No unverified battery curve is reported. */
 }
 static int power_off(void) { power_shutdown(); return -1; }
-static const char s_instructions[] =
-    "This gadget is Yunbao, a stationary ARCS Mini voice companion. "
-    "Say ni hao yun bao or short click the power button to start a conversation. After each answer, wait for the listening prompt before speaking again. Five seconds of silence or a short click ends the conversation. "
-    "Replies are spoken by its own speaker. Reply in the user's language, "
-    "in one to three short sentences without Markdown. "
-    "Its screen shows connection and voice status automatically. "
-    "It has no advertised camera, robot movement or motion sensor.";
-static const gadget_board_t s_board = {
-    .name = "云宝",
-    .model_id = "arcs-mini-yunbao",
+static gadget_board_t s_board = {
+    .name = IMPO_DISPLAY_NAME,
+    .model_id = IMPO_MODEL_ID,
     .ble_prefix = "ImpoGadget",
-    .product_id = NULL,
+    .product_id = IMPO_PLATFORM_PRODUCT_ID,
     .init = init,
     .audio = { .speaker = true, .microphone = true, .mic_channel = 0,
                .mic_gain_db = 30, .set_amp = set_amp },
     .poll_buttons = poll_buttons,
     .read_power = read_power,
     .power_off = power_off,
-    .show_status = yunbao_display_show,
+    .show_status = show_status,
     .show_animation = yunbao_display_restore,
-    .instructions = s_instructions,
+    .instructions = IMPO_INSTRUCTIONS,
 };
-const gadget_board_t *gadget_board_get(void) { return &s_board; }
+const gadget_board_t *gadget_board_get(void)
+{
+    /* The official main binds this before starting the gadget tasks. Runtime
+     * callers only read the descriptor; never rewrite it from multiple tasks. */
+    static bool configured;
+    if (!configured) {
+        const impo_arcs_mini_application_t *app=impo_arcs_mini_application();
+        if (app) {
+            s_board.commands=app->commands; s_board.command_count=app->command_count;
+            s_board.events=app->events; s_board.event_count=app->event_count;
+        }
+        configured=true;
+    }
+    return &s_board;
+}
