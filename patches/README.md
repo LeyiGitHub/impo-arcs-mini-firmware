@@ -11,9 +11,9 @@
 - `0007-official-china-route.patch`：将上游国内路由源码及 Kconfig 接入 ARCS；补齐 TLS `common_name`、独立连接地址、HTTP Host/非默认端口和超时参数，Wi-Fi 地址变化重置地区缓存。国内路由策略和 TLS 透传实现保持官方版本，见 [说明](../docs/CHINA_ROUTE.md)。
 
 - `0008-preferred-wifi-startup-budget.patch`：首选网络任务延后 1 秒启动，为同步存储和连接调用提供与 SDK Wi-Fi 管理任务一致的 8 KiB 栈，并记录栈余量。用于排查启动回归，不能将此改动本身视为栈溢出根因已确认。
-- `0009-listenai-sdk-018-ipc.patch`：按聆思生成的 SDK 版本头选择双核初始化路径。0.1.6 保留手动初始化；0.1.8 使用底层 SYS_INIT 已建立的通信并核验共享布局，避免应用重复清空共享环。`version` 同时打印实际编译使用的聆思 SDK 版本。各版本的唤醒控制命令继续由各自聆思 SDK 编译，不能混用头文件或归档。
-- `0010-listenai-sdk-018-psram-contract.patch`：为已核对的 0.1.8 AP 提供 CP 内存声明配置。SDK 组件将实际 PSRAM 起点和大小放在镜像 `0x180`；AP 先检查这些字段再启动 CP。构建后还会比较镜像字段和最终配置，缺失或不一致直接停止。0.1.6 使用独立的关闭配置，保持旧布局。
-
 - `0011-official-relay-trust-root.patch`：增加官方新中继网关使用的 SSL.com TLS ECC Root CA 2022；保留原有公共根和强制证书验证。指纹及探测边界见国内连接说明。
+- `0012-listenai-sdk-018-ipc.patch`：按聆思生成的 SDK 版本头选择双核初始化路径。0.1.6 保留手动初始化；0.1.8 使用底层 SYS_INIT 已建立的通信并核验共享布局，避免应用重复清空共享环。`version` 同时打印实际编译使用的聆思 SDK 版本。各版本的唤醒控制命令继续由各自聆思 SDK 编译，不能混用头文件或归档。
+- `0013-listenai-sdk-018-psram-contract.patch`：为已核对的 0.1.8 AP 提供 CP 内存声明配置。SDK 组件将实际 PSRAM 起点和大小放在镜像 `0x180`；AP 先检查这些字段再启动 CP。构建后还会比较镜像字段和最终配置，缺失或不一致直接停止。0.1.6 使用独立的关闭配置，保持旧布局。
+
 
 这些是本项目的社区修正，不代表上游已接受。TLS、WebSocket、Noise、配对、凭据刷新、设备身份和语音上传协议继续使用原 SDK。网络连接质量和实际听测见 `docs/VALIDATION.md`。

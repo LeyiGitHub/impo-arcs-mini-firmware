@@ -2,10 +2,11 @@ import sys
 import tempfile
 import unittest
 import struct
+import subprocess
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from arcs_sdk import validate, build_directory
-from check_image import check_psram_contract
+from check_image import check_psram_contract, incomplete_archives
 
 class SDKProfileTests(unittest.TestCase):
     def test_explicit_profile_rejects_the_other_runtime(self):
@@ -35,6 +36,18 @@ class SDKProfileTests(unittest.TestCase):
         check_psram_contract(image, 0x28800000, 0x800000)
         with self.assertRaisesRegex(SystemExit, "retained AP"):
             check_psram_contract(image, 0x28300000, 0x500000)
+    def test_real_archive_truncated_at_64k_is_rejected(self):
+        with tempfile.TemporaryDirectory() as name:
+            build = Path(name)
+            member = build / "payload.o"
+            member.write_bytes(b"archive truncation regression\n" * 4096)
+            archive = build / "driver.a"
+            subprocess.run(["ar", "rcs", str(archive), str(member)], check=True, capture_output=True)
+            self.assertEqual(incomplete_archives(build), [])
+            complete = archive.read_bytes()
+            self.assertGreater(len(complete), 65536)
+            archive.write_bytes(complete[:65536])
+            self.assertEqual(incomplete_archives(build), [archive])
 
 if __name__ == "__main__":
     unittest.main()

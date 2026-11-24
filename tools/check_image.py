@@ -19,7 +19,28 @@ def incomplete_archives(build):
     for archive in Path(build).rglob("*.a"):
         with archive.open("rb") as f:
             magic = f.read(8)
-        if magic not in (b"!<arch>\n", b"!<thin>\n"):
+            valid = magic in (b"!<arch>\n", b"!<thin>\n")
+            # A truncated regular archive can retain a valid magic. Validate
+            # member boundaries too: a real build produced only the first
+            # 65536 bytes of lisa_flash.a, which the linker cannot consume.
+            if magic == b"!<arch>\n":
+                size = archive.stat().st_size
+                offset = 8
+                while valid and offset < size:
+                    header = f.read(60)
+                    try:
+                        member_size = int(header[48:58])
+                    except ValueError:
+                        valid = False
+                        break
+                    end = offset + 60 + member_size
+                    valid = (len(header) == 60 and header[58:60] == b"`\n"
+                             and member_size >= 0 and end <= size)
+                    offset = end + member_size % 2
+                    if valid:
+                        f.seek(offset)
+                valid = valid and offset == size
+        if not valid:
             bad.append(archive)
     return bad
 
