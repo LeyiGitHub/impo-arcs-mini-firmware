@@ -7,7 +7,7 @@ board=firmware/boards/arcs_mini_yunbao/gadget
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$board" tests/test_yunbao_button.c "$board/yunbao_button.c" -o "$output/button"
 "$output/button"
 python3 tools/prepare_sdk.py
-"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/crash_stubs -Itests/audio_stubs \
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/crash_stubs -Isdk/include -Itests/audio_stubs \
   tests/test_crash_record.c -o "$output/crash"
 "$output/crash"
 gadget=upstream/arcs/gadget
@@ -15,7 +15,7 @@ gadget=upstream/arcs/gadget
   tests/test_yunbao_screen.c "$board/yunbao_screen_ui.c" -o "$output/screen"
 "$output/screen"
 # Expose the SDK's M_PI constant from glibc in the C11 host audio build.
-"${CC:-cc}" -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -Werror -Itests/audio_stubs -I"$gadget" \
+"${CC:-cc}" -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -Werror -Isdk/include -Itests/audio_stubs -I"$gadget" \
   tests/test_sound_buffer.c "$gadget/gadget_sound.c" "$gadget/gadget_pcm.c" -lm -o "$output/sound"
 "$output/sound"
 sh tests/run_wifi.sh

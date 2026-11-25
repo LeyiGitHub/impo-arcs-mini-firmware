@@ -35,7 +35,7 @@ def load_product(path=DEFAULT_PRODUCT):
     path = Path(path).resolve()
     p = json.loads(path.read_text())
     object_keys(p, ["schema_version", "id", "display_name", "screen_title", "model_id", "node_prefix",
-                    "product_id", "continuous_dialogue", "wake_interrupt", "china_relay", "instructions", "wake", "voice"], "product")
+                    "product_id", "continuous_dialogue", "wake_interrupt", "china_relay", "instructions", "wake", "voice", "playback"], "product")
     if p.get("schema_version") != 1:
         raise ValueError("Unsupported product schema_version")
     for key in ["id", "model_id", "node_prefix"]:
@@ -57,6 +57,14 @@ def load_product(path=DEFAULT_PRODUCT):
     if type(pause) is not int or not 600 <= pause <= 2000:
         raise ValueError("voice.endpoint_pause_ms: expected 600..2000 integer milliseconds")
     p["voice"] = {"upload_mode": mode, "endpoint_pause_ms": pause}
+    playback=p.get("playback",{})
+    object_keys(playback,["mode","prefill_ms","sentence_tts"],"playback")
+    playback_mode=playback.get("mode","complete")
+    prefill=playback.get("prefill_ms",800)
+    if playback_mode not in ("complete","adaptive"): raise ValueError("playback.mode: complete or adaptive")
+    if type(prefill) is not int or not 600<=prefill<=2000: raise ValueError("playback.prefill_ms: 600..2000")
+    p["playback"]={"mode":playback_mode,"prefill_ms":prefill,
+                   "sentence_tts":boolean(playback.get("sentence_tts",False),"playback.sentence_tts")}
     w = p.get("wake", {})
     object_keys(w, ["enabled", "bundle"], "wake")
     enabled = boolean(w.get("enabled", False), "wake.enabled")
@@ -113,6 +121,9 @@ def generated_files(p, font=None):
               "IMPO_SCREEN_TITLE": q(p["screen_title"]), "IMPO_INSTRUCTIONS": q(p["instructions"]),
               "IMPO_CONTINUOUS_DIALOGUE": str(p["continuous_dialogue"]).lower(),
               "IMPO_WAKE_INTERRUPT": str(p["wake_interrupt"]).lower(),
+              "IMPO_PLAYBACK_ADAPTIVE": str(p["playback"]["mode"]=="adaptive").lower(),
+              "IMPO_PLAYBACK_PREFILL_MS": str(p["playback"]["prefill_ms"]),
+              "IMPO_PLAYBACK_SENTENCE_TTS": str(p["playback"]["sentence_tts"]).lower(),
               "IMPO_VOICE_UPLOAD_OVERLAP": str(p["voice"]["upload_mode"] == "overlap").lower(),
               "IMPO_VOICE_ENDPOINT_PAUSE_MS": str(p["voice"]["endpoint_pause_ms"]),
               "IMPO_WAKE_ENABLED": str(w["enabled"]).lower(), "IMPO_WAKE_LABEL": q(w["label"]),

@@ -150,7 +150,7 @@ impo_arcs_mini_voice_snapshot(&snapshot);
 
 首 TTS 字节、首 PCM 和驱动首次写入另有带声音代次的日志；驱动写入不代表声学
 首声。测试方法见 [固定语料工具](VOICE_LATENCY_BENCH.md)。普通应用不包含
-`examples/voice_latency_probe` 诊断订阅。按句 TTS、预取及自适应起播尚未实现。
+`examples/voice_latency_probe` 诊断订阅。播放接收解耦、阈值起播及完整最终文字的分段预取见 [播放阶段优化](PLAYBACK_OPTIMIZATION.md)。
 
 ## 更换唤醒词
 

@@ -14,7 +14,7 @@ G=upstream/arcs/gadget
 "$output/association"
 "$output/voice"
 "${CC:-cc}" -std=c11 -D_POSIX_C_SOURCE=200809L -pthread -Wall -Wextra -Werror \
-  -Itests/voice_stubs -Itests/audio_stubs -Itests/cloud_stubs -Iupstream/arcs/link \
+  -Itests/voice_stubs -Isdk/include -Itests/audio_stubs -Itests/cloud_stubs -Iupstream/arcs/link \
   tests/test_link_streams.c -o "$output/streams"
 "$output/streams"
 B=firmware/boards/arcs_mini_yunbao/gadget
@@ -27,16 +27,16 @@ if [ -n "${WAKE_FLASH_BACKUP:-}" ]; then
 else
     "$output/wake"
 fi
-"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/audio_stubs \
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Isdk/include -Itests/audio_stubs \
   tests/test_mic_ownership.c -o "$output/mic"
 "$output/mic"
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -DCONFIG_LISA_AUDIO_RECORD_INDIVIDUAL_GAIN \
-  -Itests/audio_stubs tests/test_mic_ownership.c -o "$output/mic-reference"
+  -Isdk/include -Itests/audio_stubs tests/test_mic_ownership.c -o "$output/mic-reference"
 "$output/mic-reference"
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Isdk/include -I"$B" -I"$G" \
   tests/test_wake_policy.c -o "$output/wake-policy"
 "$output/wake-policy"
-"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$J" -Itests/audio_stubs -I"$G" \
-  -Iupstream/arcs/link tests/test_speech_cancel.c "$G/gadget_speech.c" "$G/gadget_pcm.c" \
-  "$J/cJSON.c" -lm -o "$output/speech-cancel"
-"$output/speech-cancel"
+"${CC:-cc}" -std=c11 -D_POSIX_C_SOURCE=200809L -pthread -Wall -Wextra -Werror -I"$J" -Isdk/include -Itests/voice_stubs -Itests/audio_stubs -I"$G" \
+  -Iupstream/arcs/link tests/test_playback_pipeline.c "$G/gadget_sound.c" "$G/gadget_pcm.c" \
+  "$J/cJSON.c" -lm -o "$output/playback"
+"$output/playback"

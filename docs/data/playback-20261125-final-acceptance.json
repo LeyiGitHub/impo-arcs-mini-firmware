@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "image": {
+    "product": "arcs-mini2-playback",
+    "listenai_sdk_version": "0.1.8",
+    "image_bytes": 1871432,
+    "image_sha256": "90d0638523d57355c7530e3cb9893c3e19593f49425a20dc2f6d875d0e8d876c",
+    "independent_cp_readback_matches": true,
+    "all_non_cp_bytes_unchanged": true
+  },
+  "cancellation": {
+    "cancel_during_fetch": true,
+    "cancel_during_play": true,
+    "new_utterance_after_cancel": true,
+    "complete_stop_retains_metrics": true,
+    "final_utterance": {
+      "played_samples": 67200,
+      "underruns": 0,
+      "underrun_ms": 0,
+      "ingress_overflows": 0,
+      "worker_stack_free": 1204
+    },
+    "same_boot": true
+  },
+  "synthetic_wake": {
+    "synthetic_wake_interrupt": true,
+    "wake_hits_delta": 1,
+    "interrupts_delta": 1,
+    "same_boot": true
+  },
+  "voice_timeout": {
+    "attempts": 1,
+    "complete": 0,
+    "additional_planned_question_not_sent": 1,
+    "chat_upload_and_ack_observed": true,
+    "complete_text_observed": true,
+    "tts_requests_observed": 2,
+    "audio_body_observed": false,
+    "original_question_not_resent": true,
+    "root_cause_established": false
+  },
+  "after_controlled_reboot": {
+    "pairing_retained": true,
+    "wifi_associated": true,
+    "has_ip": true,
+    "clock_synced": false,
+    "dns_failures_observed": true,
+    "online": false,
+    "additional_question_sent": false
+  },
+  "network_recovery": {
+    "controlled_reboot": true,
+    "pairing_retained": true,
+    "wifi_associated": true,
+    "dhcp_ip_present": true,
+    "observed_dns_failures": true,
+    "eventual_clock_synced": true,
+    "eventual_link_online": true,
+    "online_check_uptime_s": 236
+  },
+  "recovery_voice": {
+    "attempts": 2,
+    "completed": 2,
+    "capture_dropped_bytes": 0,
+    "different_corpus": true,
+    "prior_question_resent": false,
+    "preceding_invalid_tool_run_question_played": false
+  },
+  "final_state": {
+    "online": true,
+    "paired": true,
+    "screen_ready": true,
+    "idle_wake_listening": true,
+    "adaptive": true,
+    "prefill_ms": 1200,
+    "sentence_tts": false,
+    "device_volume": 20,
+    "mac_output_volume": 25
+  }
+}

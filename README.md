@@ -91,6 +91,10 @@ ARCS_BASE=/path/to/arcs-sdk-0.1.6 sh upstream/arcs/tests/host/run.sh
 
 设置 `ARCS_BASE` 后，第一项还会执行真实语音任务的录音与上传测试；也可单独运行 `sh tests/run_voice.sh`。它检查网络调用发生前麦克风已停止、PCM 顺序与 WAV 长度、慢上传、静音、失败和取消期限，以及连续两轮、静音退出、按键取消、麦克风独占和唤醒资源边界。
 
+播放接收/解码解耦、自适应起播、最终文字分句预取及独立Mini2产品配置见
+[播放阶段优化](docs/PLAYBACK_OPTIMIZATION.md)。该文保留同镜像声学对照、取消
+验收和完整问答失败；性能数字不能作为整链路稳定性或真人听感结论。
+
 ## 许可证
 
 新增代码采用 MIT；保留的 ListenAI 板级声明采用 Apache-2.0，中文位图字形采用 SIL OFL 1.1。参见 `LICENSE`、`LICENSE-APACHE`、`LICENSE-OFL`、`NOTICE` 及下载的官方 SDK 授权文件。凭据、配对、设备日志、原机备份与用户状态禁止提交。

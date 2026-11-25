@@ -60,6 +60,13 @@ class ProductTests(unittest.TestCase):
                       {"reply_mode":"sentence"}]:
             self.default["voice"]=value
             with self.assertRaises(ValueError): self.load()
+    def test_playback_config(self):
+        self.assertEqual(self.load()['playback'],{'mode':'complete','prefill_ms':800,'sentence_tts':False})
+        self.default['playback']={'mode':'adaptive','prefill_ms':800,'sentence_tts':True}
+        self.assertIn(b'IMPO_PLAYBACK_ADAPTIVE true',generated_files(self.load())['impo_product_config.h'])
+        for value in [{'mode':'stream'},{'prefill_ms':True},{'prefill_ms':599},{'prefill_ms':2001},{'sentence_tts':'yes'}]:
+            self.default['playback']=value
+            with self.assertRaises(ValueError):self.load()
     def test_disabled_needs_no_resources(self):
         self.default["wake"]={"enabled":False}
         p=self.load()

@@ -164,6 +164,13 @@ def run_trial(sh, args, index, mode, pause):
         while time.monotonic() < end:
             if re.search(r"gadget_voice.*listening", sh.clean(sh.raw[start:])):
                 break
+            # Asynchronous shell/log output may interleave the human log line.
+            # A fresh canonical snapshot is authoritative before any stimulus.
+            try:
+                if parse_snapshot(sh.command("voice_latency", .1))["phase"] == 1:
+                    break
+            except ValueError:
+                pass
             sh.drain(.05)
         else:
             raise RuntimeError("Listening did not start; question not played")
@@ -192,10 +199,14 @@ def run_trial(sh, args, index, mode, pause):
         result["reply_diagnostics"] = parse_reply_diagnostics(text, result["epoch"])
         result["chat_requests"] = len(re.findall(r"stream \d+: POST /chat/stream", text))
         result["tts_requests"] = len(re.findall(r"stream \d+: POST /tts", text))
-        result["ok"] &= result["chat_requests"] == 1 and result["tts_requests"] == 1
-        # Only speech after begin say: exclude both listening beeps.
-        speech = text.split("begin say", 1)[1] if "begin say" in text else ""
-        result["answer_buffer_ready"] = bool(re.search(r"speech buffer ready:", speech))
+        # Exclude listening beeps and support both legacy and queued playback.
+        begins = re.split(r"begin (?:say|speech)\b", text, maxsplit=1)
+        speech = begins[1] if len(begins) == 2 else ""
+        decoded = re.search(r"speech decoded gen=(\d+) segments=(\d+)", speech)
+        expected_tts = int(decoded[2]) if decoded else 1
+        result["ok"] &= result["chat_requests"] == 1 and result["tts_requests"] == expected_tts
+        result["answer_buffer_ready"] = bool(decoded or re.search(r"speech buffer ready:", speech))
+        if decoded: result["answer_segments_decoded"] = expected_tts
         result["answer_ended"] = "ended; last 10 blocks" in speech
         result["ok"] &= result["answer_buffer_ready"] and result["answer_ended"]
         result["voice_ok"] = result["ok"]
@@ -216,7 +227,10 @@ def run_trial(sh, args, index, mode, pause):
         tail = ""
         for stamp, data in sh.events[event_start:]:
             chunk = tail + sh.clean(data)
-            if "speech buffer ready:" in chunk and "ready_host_mono" not in result:
+            ready = "speech buffer ready:" in chunk
+            if decoded:
+                ready = bool(re.search(r"sound_first_write gen="+decoded[1]+r" mono_ms=", chunk))
+            if ready and "ready_host_mono" not in result:
                 result["ready_host_mono"] = stamp
             if "listened " in chunk and "capture_host_mono" not in result:
                 result["capture_host_mono"] = stamp

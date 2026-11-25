@@ -93,6 +93,7 @@ void gadget_sound_stop(void) { playing_until=0; }
 void gadget_speech_cancel(void) { gadget_sound_stop(); }
 gadget_sound_state_t gadget_sound_state(void) { return plat_uptime_ms()<playing_until?GADGET_SOUND_PLAYING:GADGET_SOUND_IDLE; }
 const char *gadget_sound_error(void) { return ""; }
+bool gadget_speech_started(void) { return false; }
 int gadget_speech_say(const char *text) { assert(text && *text);spoken++;playing_until=plat_uptime_ms()+200;return 0; }
 impo_link_state_t impo_link_state(void) { return IMPO_LINK_ONLINE; }
 int impo_link_stream_open(const char *path,const char *type,const char *accept,const void *body,size_t n,bool more,const impo_link_stream_sink_t *sink)

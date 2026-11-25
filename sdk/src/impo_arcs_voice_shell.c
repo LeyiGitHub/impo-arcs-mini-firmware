@@ -57,3 +57,22 @@ static int voice_diagnostics_cmd(int argc, char **argv)
 }
 SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0) | SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN) | SHELL_CMD_DISABLE_RETURN,
                  voice_diagnostics, voice_diagnostics_cmd, privacy-preserving reply and reset counters);
+
+static int playback_cmd(int argc,char **argv)
+{
+    if(argc!=1) {
+        if(argc!=5 || (strcmp(argv[1],"complete") && strcmp(argv[1],"adaptive")))return -1;
+        char *end=NULL;unsigned long ms=strtoul(argv[2],&end,10);
+        if(!end||*end||ms<600||ms>2000 || (strcmp(argv[3],"full")&&strcmp(argv[3],"sentence")) || strcmp(argv[4],"apply"))return -1;
+        impo_arcs_playback_config_t c={!strcmp(argv[1],"adaptive"),(uint32_t)ms,!strcmp(argv[3],"sentence")};
+        if(impo_arcs_mini_configure_playback(&c)) {shellPrint(shellGetCurrent(),"playback busy; unchanged\n");return -1;}
+    }
+    impo_arcs_playback_snapshot_t s;impo_arcs_mini_playback_snapshot(&s);
+    shellPrint(shellGetCurrent(),"playback gen=%u active=%u failed=%u cancelled=%u adaptive=%u sentence=%u\n",s.generation,s.active,s.failed,s.cancelled,s.adaptive,s.sentence_tts);
+    shellPrint(shellGetCurrent(),"playback samples played=%u queued=%u underruns=%u gap_ms=%u prefill_ms=%u\n",s.played_samples,s.queued_samples,s.underruns,s.underrun_ms,s.prefill_ms);
+    shellPrint(shellGetCurrent(),"playback ingress high=%u overflow=%u bytes=%u stack=%u segments=%u/%u\n",s.ingress_high_water,s.ingress_overflows,s.received_bytes,s.worker_stack_free,s.segments_decoded,s.segments_requested);
+    shellPrint(shellGetCurrent(),"playback timing request=%llu body=%llu pcm=%llu first=%llu last=%llu\n",(unsigned long long)s.request_ms,(unsigned long long)s.first_body_ms,(unsigned long long)s.first_pcm_ms,(unsigned long long)s.first_write_ms,(unsigned long long)s.last_write_ms);
+    return 0;
+}
+SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0)|SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN)|SHELL_CMD_DISABLE_RETURN,
+                 playback,playback_cmd,playback configuration and counters);

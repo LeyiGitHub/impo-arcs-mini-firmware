@@ -3,6 +3,7 @@
 #include "gadget_board.h" /* Official command, event and status contracts. */
 #include "impo_arcs_wake.h"
 #include "impo_arcs_voice.h"
+#include "impo_arcs_playback.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +16,7 @@ typedef struct {
     bool continuous_dialogue, wake_interrupt;
     impo_arcs_voice_config_t voice;
     impo_arcs_wake_config_t wake;
+    impo_arcs_playback_config_t playback;
 } impo_arcs_mini_product_t;
 
 /* All tables and callbacks must have static lifetime. Commands use the official

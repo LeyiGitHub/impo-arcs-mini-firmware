@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "arcs-mini2-playback",
+  "display_name": "Arcs Mini 2",
+  "model_id": "arcs-mini2",
+  "node_prefix": "arcsmini2",
+  "continuous_dialogue": true,
+  "wake_interrupt": true,
+  "china_relay": true,
+  "voice": {
+    "upload_mode": "batch",
+    "endpoint_pause_ms": 1200
+  },
+  "wake": {
+    "enabled": true,
+    "bundle": "../resources/wake/xiaozhou-preserved.json"
+  },
+  "playback": {
+    "mode": "adaptive",
+    "prefill_ms": 1200,
+    "sentence_tts": false
+  }
+}

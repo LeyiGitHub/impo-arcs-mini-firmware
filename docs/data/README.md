@@ -70,3 +70,49 @@ documentation packaging changes.
 Raw audio, logs, pairing details, original backups and acoustic-model binaries
 stay outside this repository. See `../VOICE_LATENCY_VALIDATION.md` and
 `../VOICE_LATENCY_BENCH.md` for the measurement method and acceptance boundaries.
+
+Playback-only measurements use a different metric and must not be pooled with
+question-to-answer voice datasets:
+
+- `playback-20261125-matched-30.json`: same image/boot, ten interleaved cycles
+  of complete, adaptive/full and adaptive/sentence. All 30 played completely;
+  two adaptive acoustic samples were rejected, no ingress overflow. One sentence
+  trial had an 879 ms rebuffer. This is why the device uses adaptive/full.
+- `playback-20261125-exploration-9.json`: separate preceding exploration on the
+  same candidate, with the coarser device-delta acoustic window. Do not pool it
+  with the host-first-write anchored matched run. All nine played completely;
+  one adaptive acoustic sample was rejected.
+
+The initial overlong-shell tool runs sent no TTS. A reboot during their cleanup
+remains unexplained. See `../PLAYBACK_OPTIMIZATION.md` for exact acceptance and
+the later final-image verification; the matched image is identified in each JSON.
+
+- `playback-20261125-short-6.json`: separate short-text exploration, two trials
+  per mode, all six completed. The adaptive/800 mode had one 431 ms rebuffer;
+  three acoustic samples were rejected. The device candidate was subsequently
+  raised to 1200 ms and tested separately.
+
+- `playback-20261125-release-matched-20.json`: exact installed final image,
+  ten alternating complete/adaptive-1200 cycles. 20/20 complete, zero underruns
+  or ingress overflows; acoustic acceptance 7/10 and 8/10 respectively.
+- `playback-20261125-release-short-8.json`: same final image, separate short text,
+  four attempts per mode, 8/8 complete with zero underruns/overflow. Acoustic
+  acceptance 2/4 and 4/4. Do not pool text lengths or earlier candidates.
+
+- `playback-20261125-final-acceptance.json`: final-image readback, fetch/play
+  cancellation, retained metrics and synthetic wake interruption. This does not
+  represent human listening or wake accuracy.
+
+- `voice-latency-20261125-playback-timeout-1.json`: one full voice question
+  on the final playback image timed out after upload, ACK and final text. No TTS
+  audio body was observed; the firmware performed its existing single pre-audio
+  TTS retry. The question was not resent, and the second planned slot was not
+  attempted. After a controlled reboot, pairing and Wi-Fi/IP remained, but DNS
+  and clock sync failed and the device stayed offline. The device eventually synced time and reconnected automatically, about 236
+  seconds after reboot; recovery questions use a separate new corpus. Do not pool this failure with playback-only speed measurements.
+
+- `voice-latency-20261125-playback-recovery-2.json`: exact final image after the
+  controlled reboot and automatic network recovery, a separate greeting corpus.
+  Two complete batch question/reply/TTS turns, no capture drops. No controlled
+  end-to-end speed claim. A preceding console-listening guard refusal played no
+  question and is retained privately as an invalid tool run.

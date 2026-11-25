@@ -1,0 +1,741 @@
+--- a/arcs/gadget/gadget_core.c
++++ b/arcs/gadget/gadget_core.c
+@@ -210,7 +210,7 @@
+ static cJSON *cmd_speaker_stop(const cJSON *params)
+ {
+     (void)params;
+-    gadget_sound_stop();
++    gadget_speech_cancel();
+     return gadget_command_ok();
+ }
+ 
+@@ -395,7 +395,7 @@
+               b->event_count);
+     int r = b->init != NULL ? b->init() : 0;
+     if (b->audio.speaker) {
+-        s_speaker = gadget_sound_start(b->audio.set_amp) == 0;
++        s_speaker = gadget_sound_start(b->audio.set_amp) == 0 && gadget_speech_start() == 0;
+     }
+     /* Voice needs the speaker for replies, the mic, and a button to start a turn. */
+     if (s_speaker && b->audio.microphone && b->poll_buttons != NULL && gadget_voice_start() == 0) {
+--- a/arcs/gadget/gadget_sound.c
++++ b/arcs/gadget/gadget_sound.c
+@@ -26,7 +26,7 @@
+ #include "lisa_log.h"
+ 
+ #define RATE            GADGET_SOUND_RATE
+-#define RING_SAMPLES    (RATE * 30)     /* 30 s, 960 KB of PSRAM: a long reply never stalls the link */
++#define RING_SAMPLES    (RATE * 30)     /* 30 s, 960 KB of PSRAM; ingress overflow fails explicitly */
+ #define PREFILL_SAMPLES (RATE * 25)     /* leave 5 s free so long replies cannot deadlock */
+ #define BLOCK           256             /* one DMA buffer, 16 ms */
+ #define AMP_OFF_MS      1000
+@@ -43,6 +43,10 @@
+ static volatile bool s_input_done = true;
+ static volatile bool s_buffering;
+ static char s_error[48];
++static bool s_adaptive, s_started;
++static size_t s_prefill;
++static uint64_t s_rebuffer_at;
++static impo_arcs_playback_snapshot_t s_play;
+ static int s_volume = DEFAULT_VOLUME;
+ static int32_t s_gain_q15;
+ static void (*s_set_amp)(bool on);
+@@ -56,50 +60,66 @@
+ 
+ /* ---- ring ---- */
+ 
+-static size_t ring_take(int16_t *out, size_t max)
+-{
+-    xSemaphoreTake(s_lock, portMAX_DELAY);
++static size_t ring_take(int16_t *out, size_t max, uint32_t *gen)
++{
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    *gen = s_gen;
+     size_t n = s_count < max ? s_count : max;
+-    for (size_t i = 0; i < n; i++) {
+-        out[i] = s_ring[s_tail];
+-        s_tail = (s_tail + 1) % RING_SAMPLES;
+-    }
++    size_t first=RING_SAMPLES-s_tail;if(first>n)first=n;
++    memcpy(out,s_ring+s_tail,first*sizeof(*out));
++    memcpy(out+first,s_ring,(n-first)*sizeof(*out));
++    s_tail=(s_tail+n)%RING_SAMPLES;
+     s_count -= n;
+     xSemaphoreGive(s_lock);
+     return n;
+ }
+ 
+-static void ring_clear(void)
++size_t gadget_sound_room(void)
++{
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    size_t room = RING_SAMPLES - s_count;
++    xSemaphoreGive(s_lock);
++    return room;
++}
++
++/* ---- producer side ---- */
++
++static uint32_t begin_sound(const char *what, bool buffered, bool adaptive, uint32_t prefill)
+ {
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+     s_head = s_tail = s_count = 0;
+-    xSemaphoreGive(s_lock);
+-}
+-
+-size_t gadget_sound_room(void)
+-{
+-    return RING_SAMPLES - s_count;
+-}
+-
+-/* ---- producer side ---- */
+-
+-uint32_t gadget_sound_begin(const char *what)
+-{
+-    ring_clear();
+     s_gen++;
+-    s_buffering = false;
++    s_buffering = buffered;
++    s_adaptive = adaptive;
++    s_started = false;
++    s_rebuffer_at = 0;
++    s_prefill = adaptive ? RATE * prefill / 1000 : PREFILL_SAMPLES;
++    memset(&s_play, 0, sizeof(s_play));
++    s_play.generation = s_gen;
++    s_play.prefill_ms = adaptive ? prefill : 25000;
+     s_input_done = false;
+     s_error[0] = '\0';
+     s_state = GADGET_SOUND_FETCHING;
+-    LISA_LOGI(TAG, "begin %s", what);
+-    return s_gen;
+-}
+-
+-uint32_t gadget_sound_begin_buffered(const char *what)
+-{
+-    uint32_t gen = gadget_sound_begin(what);
+-    s_buffering = true;
++    uint32_t gen = s_gen;
++    xSemaphoreGive(s_lock);
++    LISA_LOGI(TAG, "begin %s gen=%u adaptive=%u prefill_ms=%u", what, (unsigned)gen,
++              (unsigned)adaptive, (unsigned)s_play.prefill_ms);
+     return gen;
++}
++uint32_t gadget_sound_begin(const char *what) { return begin_sound(what, false, false, 0); }
++uint32_t gadget_sound_begin_buffered(const char *what) { return begin_sound(what, true, false, 0); }
++uint32_t gadget_sound_begin_adaptive(const char *what, uint32_t prefill_ms)
++{ return begin_sound(what, true, true, prefill_ms); }
++void gadget_sound_playback_snapshot(impo_arcs_playback_snapshot_t *out)
++{
++    if (!out || !s_lock) return;
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    out->generation=s_gen;out->queued_samples=(uint32_t)s_count;
++    out->played_samples=s_play.played_samples;out->underruns=s_play.underruns;
++    out->underrun_ms=s_play.underrun_ms+(s_rebuffer_at ? (uint32_t)(plat_uptime_ms()-s_rebuffer_at) : 0);
++    out->prefill_ms=s_play.prefill_ms;out->first_write_ms=s_play.first_write_ms;
++    out->last_write_ms=s_play.last_write_ms;out->rebuffering=s_started && s_buffering;
++    xSemaphoreGive(s_lock);
+ }
+ 
+ int gadget_sound_write(uint32_t gen, const int16_t *pcm, size_t samples, uint32_t timeout_ms)
+@@ -110,17 +130,18 @@
+             return -1;   /* replaced or stopped */
+         }
+         xSemaphoreTake(s_lock, portMAX_DELAY);
++        if (gen != s_gen || s_state==GADGET_SOUND_FAILED) { xSemaphoreGive(s_lock); return -1; }
+         size_t room = RING_SAMPLES - s_count;
+         size_t n = samples < room ? samples : room;
+-        for (size_t i = 0; i < n; i++) {
+-            s_ring[s_head] = pcm[i];
+-            s_head = (s_head + 1) % RING_SAMPLES;
+-        }
++        size_t first=RING_SAMPLES-s_head;if(first>n)first=n;
++        memcpy(s_ring+s_head,pcm,first*sizeof(*pcm));
++        memcpy(s_ring,pcm+first,(n-first)*sizeof(*pcm));
++        s_head=(s_head+n)%RING_SAMPLES;
+         s_count += n;
+-        xSemaphoreGive(s_lock);
+         if (n > 0 && !s_buffering && (s_state == GADGET_SOUND_FETCHING || s_state == GADGET_SOUND_DECODING)) {
+             s_state = GADGET_SOUND_PLAYING;
+         }
++        xSemaphoreGive(s_lock);
+         pcm += n;
+         samples -= n;
+         if (samples > 0) {
+@@ -136,22 +157,17 @@
+ 
+ void gadget_sound_end(uint32_t gen, const char *error)
+ {
+-    if (gen != s_gen) {
+-        return;
+-    }
+-    if (error != NULL) {
+-        /* Never speak a truncated phrase that has not started playing yet. */
+-        if (s_buffering) {
+-            ring_clear();
+-            s_buffering = false;
+-        }
+-        snprintf(s_error, sizeof(s_error), "%s", error);
+-        if (s_count == 0) {
+-            s_state = GADGET_SOUND_FAILED;
+-        }
+-        LISA_LOGW(TAG, "sound failed: %s", error);
+-    }
+-    s_input_done = true;
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (gen != s_gen) { xSemaphoreGive(s_lock); return; }
++    if (error) {
++        if(s_rebuffer_at){s_play.underrun_ms+=(uint32_t)(plat_uptime_ms()-s_rebuffer_at);s_rebuffer_at=0;}
++        s_head=s_tail=s_count=0;s_buffering=false;
++        snprintf(s_error,sizeof(s_error),"%s",error);
++        s_state=GADGET_SOUND_FAILED;
++    }
++    s_input_done=true;
++    xSemaphoreGive(s_lock);
++    if (error) LISA_LOGW(TAG,"sound failed: %s",error);
+ }
+ 
+ void gadget_sound_set_decoding(uint32_t gen)
+@@ -163,11 +179,9 @@
+ 
+ void gadget_sound_stop(void)
+ {
+-    s_gen++;
+-    s_buffering = false;
+-    ring_clear();
+-    s_input_done = true;
+-    s_state = GADGET_SOUND_IDLE;
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    s_gen++;s_buffering=false;s_head=s_tail=s_count=0;s_input_done=true;s_state=GADGET_SOUND_IDLE;
++    xSemaphoreGive(s_lock);
+ }
+ 
+ /* ---- state ---- */
+@@ -247,19 +261,31 @@
+     for (;;) {
+         plat_watchdog_checkin(wd);
+         /* Keep the current 30 s PSRAM ring; do not increase internal SRAM. */
+-        if (s_buffering && !s_input_done && s_count < PREFILL_SAMPLES) {
+-            vTaskDelay(pdMS_TO_TICKS(10));
++        xSemaphoreTake(s_lock, portMAX_DELAY);
++        if (s_adaptive && s_started && !s_input_done && !s_buffering && s_count < BLOCK) {
++            s_buffering=true;s_rebuffer_at=plat_uptime_ms();s_play.underruns++;
++            uint32_t target=s_play.prefill_ms+200;
++            if (target>2000) target=2000;
++            s_play.prefill_ms=target;s_prefill=RATE*target/1000;
++        }
++        bool wait=s_buffering && !s_input_done && s_count<s_prefill;
++        bool silence=wait && s_started && s_adaptive;
++        uint32_t wait_gen=s_gen;
++        if (!wait && s_buffering) {
++            s_buffering=false;
++            if (s_rebuffer_at) {
++                s_play.underrun_ms+=(uint32_t)(plat_uptime_ms()-s_rebuffer_at);s_rebuffer_at=0;
++            }
++            if (s_count) s_state=GADGET_SOUND_PLAYING;
++        }
++        xSemaphoreGive(s_lock);
++        if (wait) {
++            if (silence) { if(wait_gen!=s_gen)continue;memset(block,0,sizeof(block));plat_audio_write(block,BLOCK); }
++            else vTaskDelay(pdMS_TO_TICKS(10));
+             continue;
+         }
+-        if (s_buffering) {
+-            s_buffering = false;
+-            if (s_count > 0) {
+-                s_state = GADGET_SOUND_PLAYING;
+-                LISA_LOGI(TAG, "speech buffer ready: %u ms", (unsigned)(s_count * 1000 / RATE));
+-            }
+-        }
+-        uint32_t gen = s_gen;
+-        size_t n = ring_take(block, BLOCK);
++        uint32_t gen;
++        size_t n = ring_take(block, BLOCK, &gen);
+         if (n == 0) {
+             if (played) {
+                 played = false;
+@@ -271,9 +297,9 @@
+                 }
+                 LISA_LOGI(TAG, "ended; last 10 blocks rms/peak:%s", line);
+             }
+-            if (s_input_done && s_state == GADGET_SOUND_PLAYING) {
+-                s_state = GADGET_SOUND_IDLE;
+-            }
++            xSemaphoreTake(s_lock,portMAX_DELAY);
++            if (gen==s_gen && s_input_done && !s_count && s_state == GADGET_SOUND_PLAYING) s_state=GADGET_SOUND_IDLE;
++            xSemaphoreGive(s_lock);
+             if (amp && quiet_ms >= AMP_OFF_MS) {
+                 LISA_LOGI(TAG, "amp off");
+                 s_set_amp(false);
+@@ -289,6 +315,7 @@
+             amp = true;
+             vTaskDelay(pdMS_TO_TICKS(AMP_ON_SETTLE_MS));
+         }
++        if (gen != s_gen) continue; /* cancellation during amplifier settle */
+         for (size_t i = 0; i < n; i++) {
+             block[i] = (int16_t)(((int32_t)block[i] * s_gain_q15) >> 15);
+         }
+@@ -304,7 +331,15 @@
+         tail_peak[tail_at] = (uint16_t)peak;
+         tail_at = (tail_at + 1) % 10;
+         played = true;
++        if (gen != s_gen) continue;
+         int result = plat_audio_write(block, BLOCK);
++        xSemaphoreTake(s_lock,portMAX_DELAY);
++        if (gen==s_gen && result>=0) {
++            s_started=true;s_play.played_samples+=(uint32_t)n;
++            if (!s_play.first_write_ms) s_play.first_write_ms=plat_uptime_ms();
++            s_play.last_write_ms=plat_uptime_ms();
++        }
++        xSemaphoreGive(s_lock);
+         if (gen == s_gen && gen != written_gen) {
+             written_gen = gen;
+             /* Driver acceptance is not a DMA callback or acoustic first sound. */
+@@ -331,7 +366,7 @@
+     if (plat_audio_start() != 0) {
+         return -1;
+     }
+-    if (xTaskCreate(out_task, "gadget_snd", 3072 / sizeof(StackType_t), NULL, 4, &s_task) != pdPASS) {
++    if (xTaskCreate(out_task, "gadget_snd", 3072 / sizeof(StackType_t), NULL, 7, &s_task) != pdPASS) {
+         return -1;
+     }
+     LISA_LOGI(TAG, "speaker ready, volume %d%%", s_volume);
+--- a/arcs/gadget/gadget_sound.h
++++ b/arcs/gadget/gadget_sound.h
+@@ -4,6 +4,7 @@
+ #include <stdbool.h>
+ #include <stddef.h>
+ #include <stdint.h>
++#include "impo_arcs_playback.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -26,6 +27,8 @@
+ uint32_t gadget_sound_begin(const char *what);
+ /* Buffer network speech until complete, or the existing ring is nearly full. */
+ uint32_t gadget_sound_begin_buffered(const char *what);
++uint32_t gadget_sound_begin_adaptive(const char *what, uint32_t prefill_ms);
++void gadget_sound_playback_snapshot(impo_arcs_playback_snapshot_t *out);
+ /* Queues 16 kHz mono samples, waiting up to timeout_ms for room. 0 ok, -1 replaced or stopped, -2 timeout. */
+ int gadget_sound_write(uint32_t gen, const int16_t *pcm, size_t samples, uint32_t timeout_ms);
+ /* No more samples for this sound; error (or NULL) says why it ended early. */
+--- a/arcs/gadget/gadget_speech.c
++++ b/arcs/gadget/gadget_speech.c
+@@ -1,138 +1,258 @@
+-/*
+- * speaker.say: asks Impo for speech (POST /tts on the link, a 24 kHz WAV) and
+- * buffers a short utterance before playing it. The WAV is decoded as it streams in
+- * (gadget_pcm) and written to gadget_sound at the speaker's rate.
+- */
++/* Official /tts, one active request, immutable-text segments and a bounded
++ * ingress. Link callbacks only copy; the speech task owns WAV/resampling. */
+ #include <stdbool.h>
++#include <stdio.h>
+ #include <stdint.h>
++#include <stdlib.h>
+ #include <string.h>
+-
++#include "FreeRTOS.h"
++#include "semphr.h"
++#include "task.h"
+ #include "cJSON.h"
+ #include "gadget_pcm.h"
+ #include "gadget_sound.h"
+ #include "gadget_speech.h"
+ #include "impo_link.h"
+ #include "platform_arcs.h"
+-
+ #define TAG "gadget_speech"
+ #include "lisa_log.h"
++#define INGRESS 65536u
++#define TEXT_MAX 16384u
++#define CHUNK 2048u
++static SemaphoreHandle_t s_lock;
++static uint8_t *s_ingress, *s_chunk;
++static char *s_pending;
++static uint32_t s_epoch, s_token;
++static int s_handle=-1;
++static bool s_active, s_net_done, s_abort;
++static size_t s_head,s_tail,s_count;
++static char s_error[48];
++static impo_arcs_playback_config_t s_config={false,800,false};
++static impo_arcs_playback_snapshot_t s_stats;
++static void save_sound_locked(void);
++static uint32_t s_sound_gen, s_learned_prefill=800, s_clean;
++static bool live(uint32_t epoch) {
++    xSemaphoreTake(s_lock,portMAX_DELAY);bool ok=s_active && s_epoch==epoch && !s_abort;
++    xSemaphoreGive(s_lock);return ok;
++}
++static void body_status(void *ctx,int status) {
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    if ((uint32_t)(uintptr_t)ctx==s_token && s_active && status!=200) {
++        s_abort=true;strcpy(s_error,"TTS status");
++    }
++    xSemaphoreGive(s_lock);
++}
++static void body_data(void *ctx,const unsigned char *data,size_t len) {
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    if ((uint32_t)(uintptr_t)ctx==s_token && s_active && !s_abort) {
++        if (!s_stats.first_body_ms) s_stats.first_body_ms=plat_uptime_ms();
++        if (len>INGRESS-s_count) {
++            s_stats.ingress_overflows++;s_abort=true;strcpy(s_error,"TTS ingress full");
++        } else {
++            size_t first=INGRESS-s_head;if(first>len)first=len;
++            memcpy(s_ingress+s_head,data,first);memcpy(s_ingress,data+first,len-first);
++            s_head=(s_head+len)%INGRESS;s_count+=len;s_stats.received_bytes+=(uint32_t)len;
++            if(s_count>s_stats.ingress_high_water)s_stats.ingress_high_water=(uint32_t)s_count;
++        }
++    }
++    xSemaphoreGive(s_lock);
++}
++static void body_end(void *ctx,const char *error) {
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    if ((uint32_t)(uintptr_t)ctx==s_token && s_active) {
++        s_net_done=true;
++        if(error){s_abort=true;snprintf(s_error,sizeof(s_error),"%s",error);}
++    }
++    xSemaphoreGive(s_lock);
++}
++static const impo_link_stream_sink_ctx_t sink={NULL,body_status,body_data,body_end};
++typedef struct { uint32_t epoch,gen,samples; } emit_ctx;
++static int emit(void *ctx,const int16_t *pcm,size_t n) {
++    emit_ctx *e=ctx;
++    if (!live(e->epoch))return -1;
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    if(s_epoch==e->epoch && !s_stats.first_pcm_ms && n){
++        s_stats.first_pcm_ms=plat_uptime_ms();
++        LISA_LOGI(TAG,"speech_timing gen=%u stage=first_pcm mono_ms=%llu",(unsigned)e->gen,(unsigned long long)s_stats.first_pcm_ms);
++    }
++    xSemaphoreGive(s_lock);
++    /* Short retry slices preserve cancellation and keep the Link task independent. */
++    size_t total=n;
++    while(n) {
++        if(!live(e->epoch))return -1;
++        size_t room=gadget_sound_room(),take=n<room?n:room;
++        if(take){if(gadget_sound_write(e->gen,pcm,take,0))return -1;pcm+=take;n-=take;}
++        else vTaskDelay(pdMS_TO_TICKS(5));
++    }
++    e->samples+=(uint32_t)total;
++    return 0;
++}
++/* Split only after a complete final display_text. UTF-8 boundaries, decimals
++ * and abbreviations stay intact: only Chinese terminal marks, !, ? or newline.
++ * First span prefers a short sentence; later spans merge to cover TTS setup time. */
++static size_t segment_len(const char *text,size_t off,bool sentence) {
++    size_t length=strlen(text+off);if(!sentence)return length;
++    size_t min=off?180:48,max=off?600:240,last=0;
++    for(size_t i=0;i<length;) {
++        unsigned char c=(unsigned char)text[off+i];size_t k=c<0x80?1:(c<0xe0?2:(c<0xf0?3:4));
++        if(k>length-i)return length;
++        bool stop=c=='!'||c=='?'||c=='\n'||(k==3 && (!memcmp(text+off+i,"。",3)||!memcmp(text+off+i,"！",3)||!memcmp(text+off+i,"？",3)));
++        i+=k;
++        if(stop){last=i;if(i>=min)return i;}
++        if(i>=max && last)return last;
++    }
++    return length; /* no invented punctuation or split inside a word */
++}
++static void speech_task(void *arg) {
++    (void)arg;
++    uint32_t owned=0;char *text=NULL;size_t offset=0;
++    gadget_wav_t wav;emit_ctx e={0};bool request=false,body_logged=false;uint32_t deadline=0;
++    for(;;) {
++        xSemaphoreTake(s_lock,portMAX_DELAY);
++        if(owned!=s_epoch) {
++            free(text);text=s_pending;s_pending=NULL;owned=s_epoch;offset=0;request=false;body_logged=false;
++            e.epoch=owned;e.gen=s_sound_gen;
++        }
++        bool active=s_active,abort=s_abort;
++        impo_arcs_playback_config_t config=s_config;
++        xSemaphoreGive(s_lock);
++        if(!active||!text){vTaskDelay(pdMS_TO_TICKS(5));continue;}
++        if(abort)goto failed;
++        if(!request) {
++            /* Leave ample PCM room before prefetching another segment. */
++            if(offset && gadget_sound_room()<GADGET_SOUND_RATE*24u){vTaskDelay(pdMS_TO_TICKS(5));continue;}
++            size_t n=segment_len(text,offset,config.sentence_tts);
++            char save=text[offset+n];text[offset+n]=0;
++            cJSON *body=cJSON_CreateObject();if(body)cJSON_AddStringToObject(body,"text",text+offset);
++            char *json=body?cJSON_PrintUnformatted(body):NULL;cJSON_Delete(body);text[offset+n]=save;
++            if(!json)goto failed;
++            xSemaphoreTake(s_lock,portMAX_DELAY);
++            bool current=s_epoch==owned && s_active && !s_abort;
++            uint32_t token=++s_token;
++            if(current){s_net_done=false;s_head=s_tail=s_count=0;s_handle=-1;s_stats.segments_requested++;}
++            xSemaphoreGive(s_lock);
++            if(!current){cJSON_free(json);continue;}
++            e.samples=0;
++            gadget_wav_init(&wav,GADGET_SOUND_RATE,emit,&e);
++            int h=impo_link_stream_open_ctx("/tts","application/json","audio/wav",json,strlen(json),false,&sink,(void *)(uintptr_t)token);
++            cJSON_free(json);
++            xSemaphoreTake(s_lock,portMAX_DELAY);
++            current=s_epoch==owned && s_active;
++            if(current)s_handle=h;
++            xSemaphoreGive(s_lock);
++            if(!current){impo_link_stream_cancel(h);continue;}
++            if(h<0)goto failed;
++            offset+=n;request=true;deadline=(uint32_t)plat_uptime_ms();
++        }
++        xSemaphoreTake(s_lock,portMAX_DELAY);
++        if(s_epoch!=owned){xSemaphoreGive(s_lock);continue;}
++        size_t n=s_count<CHUNK?s_count:CHUNK;
++        size_t first=INGRESS-s_tail;if(first>n)first=n;
++        memcpy(s_chunk,s_ingress+s_tail,first);memcpy(s_chunk+first,s_ingress,n-first);
++        s_tail=(s_tail+n)%INGRESS;s_count-=n;
++        bool end=s_net_done && !s_count;abort=s_abort;
++        uint64_t first_body=s_stats.first_body_ms;
++        s_stats.worker_stack_free=(uint32_t)uxTaskGetStackHighWaterMark(NULL)*sizeof(StackType_t);
++        xSemaphoreGive(s_lock);
++        if(abort)goto failed;
++        if(n && !body_logged){body_logged=true;LISA_LOGI(TAG,"speech_timing gen=%u stage=first_byte mono_ms=%llu",(unsigned)e.gen,(unsigned long long)first_body);}
++        if(n)deadline=(uint32_t)plat_uptime_ms();
++        if(!n && !end && (uint32_t)(plat_uptime_ms()-deadline)>45000)goto failed;
++        if(n && gadget_wav_feed(&wav,s_chunk,n)!=GADGET_WAV_OK)goto failed;
++        if(end) {
++            if(!wav.in_data || !e.samples || wav.carry_len || (wav.data_size && wav.data_size!=UINT32_MAX && wav.pcm_bytes<wav.data_size))goto failed;
++            xSemaphoreTake(s_lock,portMAX_DELAY);
++            if(s_epoch==owned){s_stats.segments_decoded++;s_handle=-1;}
++            xSemaphoreGive(s_lock);
++            if(!text[offset]) {
++                if(live(owned))gadget_sound_end(e.gen,NULL);
++                xSemaphoreTake(s_lock,portMAX_DELAY);
++                bool completed=s_epoch==owned;
++                unsigned segments=s_stats.segments_decoded;
++                if(completed){s_active=false;s_stats.active=false;}
++                xSemaphoreGive(s_lock);
++                if(completed)LISA_LOGI(TAG,"speech decoded gen=%u segments=%u",(unsigned)e.gen,segments);
++                free(text);text=NULL;
++            }
++            request=false;
++        } else if(!n) {
++            vTaskDelay(pdMS_TO_TICKS(5));
++        }
++        continue;
++failed:
++        xSemaphoreTake(s_lock,portMAX_DELAY);
++        int h=-1;bool current=s_epoch==owned;
++        if(current){h=s_handle;s_handle=-1;s_active=false;s_stats.active=false;s_stats.failed=true;s_token++;}
++        xSemaphoreGive(s_lock);
++        if(current){impo_link_stream_cancel(h);gadget_sound_end(e.gen,s_error[0]?s_error:"TTS decode failed");}
++        free(text);text=NULL;request=false;
++    }
++}
++int gadget_speech_start(void) {
++    if(s_lock)return 0;
++    s_ingress=malloc(INGRESS);s_chunk=malloc(CHUNK);s_lock=xSemaphoreCreateMutex();
++    if(!s_ingress||!s_chunk||!s_lock)return -1;
++    return xTaskCreate(speech_task,"speech_decode",4096/sizeof(StackType_t),NULL,6,NULL)==pdPASS?0:-1;
++}
++int gadget_speech_configure(const impo_arcs_playback_config_t *c) {
++    if(!c||c->prefill_ms<600||c->prefill_ms>2000)return -1;
++    if(s_lock)xSemaphoreTake(s_lock,portMAX_DELAY);
++    bool idle=!s_active && (!s_lock||gadget_sound_state()==GADGET_SOUND_IDLE||gadget_sound_state()==GADGET_SOUND_FAILED);
++    if(idle){s_config=*c;s_learned_prefill=c->prefill_ms;s_clean=0;}
++    if(s_lock)xSemaphoreGive(s_lock);
++    return idle?0:-1;
++}
++int gadget_speech_say(const char *text) {
++    if(!s_lock||!text||!*text||strlen(text)>TEXT_MAX)return -1;
++    char *copy=malloc(strlen(text)+1);if(!copy)return -1;strcpy(copy,text);
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    int old=s_handle;s_handle=-1;s_token++;s_epoch++;
++    impo_link_stream_cancel(old);
++    impo_arcs_playback_snapshot_t previous={0};gadget_sound_playback_snapshot(&previous);
++    if(!s_active && gadget_sound_state()==GADGET_SOUND_IDLE && !s_stats.failed && !s_stats.cancelled && previous.generation==s_stats.generation && previous.played_samples) {
++        if(previous.underruns){s_learned_prefill=previous.prefill_ms;s_clean=0;}
++        else if(++s_clean>=3){s_clean=0;if(s_learned_prefill>s_config.prefill_ms)s_learned_prefill-=100;}
++    }
++    if(s_learned_prefill<s_config.prefill_ms)s_learned_prefill=s_config.prefill_ms;
++    free(s_pending);s_pending=copy;s_head=s_tail=s_count=0;s_net_done=false;s_abort=false;s_error[0]=0;
++    memset(&s_stats,0,sizeof(s_stats));s_stats.active=s_active=true;s_stats.request_ms=plat_uptime_ms();
++    s_sound_gen=s_config.adaptive?gadget_sound_begin_adaptive("speech",s_learned_prefill):gadget_sound_begin_buffered("speech");
++    s_stats.generation=s_sound_gen;
++    xSemaphoreGive(s_lock);return 0;
++}
++void gadget_speech_cancel(void) {
++    if(!s_lock){gadget_sound_stop();return;}
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    save_sound_locked();
++    impo_arcs_playback_snapshot_t sound={0};gadget_sound_playback_snapshot(&sound);
++    gadget_sound_state_t state=gadget_sound_state();
++    bool unfinished=s_active || (sound.generation==s_stats.generation &&
++        (state==GADGET_SOUND_PLAYING || state==GADGET_SOUND_FETCHING));
++    int old=s_handle;s_handle=-1;s_epoch++;s_token++;s_active=false;s_abort=true;s_stats.active=false;
++    s_stats.cancelled|=unfinished;s_stats.queued_samples=0;s_stats.rebuffering=false;
++    free(s_pending);s_pending=NULL;s_head=s_tail=s_count=0;
++    gadget_sound_stop();xSemaphoreGive(s_lock);impo_link_stream_cancel(old);
++}
++/* Keep the last utterance's counters after stop invalidates the sound ring. */
++static void save_sound_locked(void)
++{
++    impo_arcs_playback_snapshot_t sound={0};gadget_sound_playback_snapshot(&sound);
++    if(sound.generation!=s_stats.generation)return;
++    s_stats.queued_samples=sound.queued_samples;s_stats.played_samples=sound.played_samples;
++    s_stats.underruns=sound.underruns;s_stats.underrun_ms=sound.underrun_ms;
++    s_stats.prefill_ms=sound.prefill_ms;s_stats.first_write_ms=sound.first_write_ms;
++    s_stats.last_write_ms=sound.last_write_ms;s_stats.rebuffering=sound.rebuffering;
++}
++void gadget_speech_snapshot(impo_arcs_playback_snapshot_t *out)
++{
++    if(!out)return;
++    memset(out,0,sizeof(*out));if(!s_lock)return;
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    save_sound_locked();*out=s_stats;
++    out->adaptive=s_config.adaptive;out->sentence_tts=s_config.sentence_tts;
++    xSemaphoreGive(s_lock);
++}
++bool gadget_speech_started(void) {
++    impo_arcs_playback_snapshot_t snapshot;gadget_speech_snapshot(&snapshot);return snapshot.played_samples>0;
++}
+ 
+-#define WRITE_WAIT_MS 5000
+-
+-static int s_handle = -1;
+-
+-static struct {
+-    uint32_t gen;
+-    bool failed;
+-    bool complete;
+-    bool first_pcm;
+-    uint32_t bytes;
+-    gadget_wav_t wav;
+-} s;
+-
+-static int emit(void *ctx, const int16_t *pcm, size_t n)
+-{
+-    (void)ctx;
+-    if (n && !s.first_pcm) {
+-        s.first_pcm = true;
+-        LISA_LOGI(TAG, "speech_timing gen=%u stage=first_pcm mono_ms=%llu", (unsigned)s.gen,
+-                  (unsigned long long)plat_uptime_ms());
+-    }
+-    return gadget_sound_write(s.gen, pcm, n, WRITE_WAIT_MS);
+-}
+-
+-static void fail(const char *why)
+-{
+-    if (!s.failed) {
+-        s.failed = true;
+-        gadget_sound_end(s.gen, why);
+-    }
+-}
+-
+-/* ---- link stream sink, on the link task ---- */
+-
+-static void on_begin(void)
+-{
+-    memset(&s, 0, sizeof(s));
+-    s.gen = gadget_sound_begin_buffered("say");
+-    gadget_wav_init(&s.wav, GADGET_SOUND_RATE, emit, NULL);
+-}
+-
+-static void on_status(int status)
+-{
+-    if (status != 200) {
+-        LISA_LOGW(TAG, "/tts status %d", status);
+-        fail("no speech came back");
+-    }
+-}
+-
+-static void on_data(const unsigned char *data, size_t len)
+-{
+-    if (s.failed || s.complete) {
+-        return;
+-    }
+-    if (!s.bytes && len) {
+-        LISA_LOGI(TAG, "speech_timing gen=%u stage=first_byte mono_ms=%llu", (unsigned)s.gen,
+-                  (unsigned long long)plat_uptime_ms());
+-    }
+-    bool was_in = s.wav.in_data;
+-    s.bytes += len;
+-    gadget_wav_result_t r = gadget_wav_feed(&s.wav, data, len);
+-    if (!was_in && s.wav.in_data) {
+-        LISA_LOGI(TAG, "speech: %u Hz, %u channel(s)", (unsigned)s.wav.rate, (unsigned)s.wav.channels);
+-    }
+-    if (r == GADGET_WAV_NOT_WAV) {
+-        fail("speech was not 16-bit WAV");
+-    } else if (r == GADGET_WAV_STOPPED) {
+-        fail("the speaker could not keep up");
+-    } else if (s.wav.in_data && s.wav.data_size != 0 && s.wav.data_size != UINT32_MAX &&
+-               s.wav.pcm_bytes >= s.wav.data_size) {
+-        /* /tts may append metadata. Release complete PCM without waiting for it. */
+-        s.complete = true;
+-        LISA_LOGI(TAG, "speech buffered: %u PCM bytes", (unsigned)s.wav.data_size);
+-        gadget_sound_end(s.gen, NULL);
+-    }
+-}
+-
+-static void on_end(const char *error)
+-{
+-    if (s.failed || s.complete) {
+-        return;
+-    }
+-    if (error != NULL) {
+-        fail(error);
+-    } else if (!s.wav.in_data) {
+-        fail("no speech came back");
+-    } else {
+-        LISA_LOGI(TAG, "speech downloaded: %u bytes, data chunk says %u, got %u", (unsigned)s.bytes,
+-                  (unsigned)s.wav.data_size, (unsigned)s.wav.pcm_bytes);
+-        gadget_sound_end(s.gen, NULL);
+-    }
+-}
+-
+-static const impo_link_stream_sink_t s_sink = { on_begin, on_status, on_data, on_end };
+-
+-int gadget_speech_say(const char *text)
+-{
+-    impo_link_stream_cancel(s_handle);
+-    cJSON *body = cJSON_CreateObject();
+-    cJSON_AddStringToObject(body, "text", text);
+-    char *json = cJSON_PrintUnformatted(body);
+-    cJSON_Delete(body);
+-    if (json == NULL) {
+-        return -1;
+-    }
+-    s_handle = impo_link_stream_open("/tts", "application/json", "audio/wav", json, strlen(json), false, &s_sink);
+-    cJSON_free(json);
+-    return s_handle >= 0 ? 0 : -1;
+-}
+-
+-/* Called by the voice task after a wake interrupt. Stale producers cannot
+- * refill a stopped speaker because its sound generation is invalidated. */
+-void gadget_speech_cancel(void)
+-{
+-    s.failed = true;
+-    impo_link_stream_cancel(s_handle);
+-    s_handle = -1;
+-    gadget_sound_stop();
+-}
+--- a/arcs/gadget/gadget_speech.h
++++ b/arcs/gadget/gadget_speech.h
+@@ -1,14 +1,15 @@
+-/* speaker.say: speech from Impo (POST /tts on the link), played as it downloads. */
+ #pragma once
+-
++#include <stdbool.h>
++#include "impo_arcs_playback.h"
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+-
+-/* Starts fetching and playing; returns at once. -1 when not connected. */
++int gadget_speech_start(void);
++int gadget_speech_configure(const impo_arcs_playback_config_t *config);
++void gadget_speech_snapshot(impo_arcs_playback_snapshot_t *out);
++bool gadget_speech_started(void);
+ int gadget_speech_say(const char *text);
+ void gadget_speech_cancel(void);
+-
+ #ifdef __cplusplus
+ }
+ #endif
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -548,7 +548,7 @@
+         gadget_sound_state_t st = gadget_sound_state();
+         bool busy = st == GADGET_SOUND_FETCHING || st == GADGET_SOUND_PLAYING;
+         /* The link dropped while fetching the speech (a router reset): say it again once it is back. */
+-        if (current != NULL && st == GADGET_SOUND_FAILED && !retried && impo_link_state() == IMPO_LINK_ONLINE) {
++        if (current != NULL && st == GADGET_SOUND_FAILED && !retried && !gadget_speech_started() && impo_link_state() == IMPO_LINK_ONLINE) {
+             LISA_LOGW(TAG, "speech failed (%s); saying the reply again", gadget_sound_error());
+             retried = true;
+             gadget_speech_say(current);

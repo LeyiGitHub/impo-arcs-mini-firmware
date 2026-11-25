@@ -16,6 +16,7 @@ static const impo_arcs_mini_product_t product = {
     .wake_interrupt = IMPO_WAKE_INTERRUPT,
     .voice = { .upload_overlap = IMPO_VOICE_UPLOAD_OVERLAP,
                .endpoint_pause_ms = IMPO_VOICE_ENDPOINT_PAUSE_MS },
+    .playback = { IMPO_PLAYBACK_ADAPTIVE, IMPO_PLAYBACK_PREFILL_MS, IMPO_PLAYBACK_SENTENCE_TTS },
     .wake = { .enabled = IMPO_WAKE_ENABLED, .label = IMPO_WAKE_LABEL,
         .keywords = keywords, .keyword_count = IMPO_WAKE_KEYWORD_COUNT,
         .model_file = IMPO_WAKE_MODEL_FILE, .wrap_file = IMPO_WAKE_WRAP_FILE,
@@ -45,3 +46,6 @@ int impo_arcs_mini_configure_voice(const impo_arcs_voice_config_t *config)
 { return gadget_voice_configure(config); }
 void impo_arcs_mini_voice_snapshot(impo_arcs_voice_snapshot_t *out)
 { gadget_voice_snapshot(out); }
+
+int impo_arcs_mini_configure_playback(const impo_arcs_playback_config_t *c) { return gadget_speech_configure(c); }
+void impo_arcs_mini_playback_snapshot(impo_arcs_playback_snapshot_t *out) { gadget_speech_snapshot(out); }

@@ -32,6 +32,7 @@ static int init(void)
     yunbao_display_start();
     gadget_voice_set_continuous(impo_arcs_mini_product()->continuous_dialogue);
     gadget_voice_configure(&impo_arcs_mini_product()->voice);
+    impo_arcs_mini_configure_playback(&impo_arcs_mini_product()->playback);
     yunbao_wake_start();
     const impo_arcs_mini_application_t *app=impo_arcs_mini_application();
     return app && app->on_init ? app->on_init() : 0;
