@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "metric": "fixed source last active frame to detected answer energy, automated acoustic proxy",
+  "stimulus_sha256": "07a63537492e497b4cf822daadb91446c5c126c28d6610a8e9c4f67c5620fb01",
+  "conditions": {
+    "modes": [
+      [
+        "batch",
+        1200
+      ]
+    ],
+    "cycles": 2,
+    "afplay_volume": 4.0,
+    "acoustic_capture": true,
+    "speaker_volume_percent": 70,
+    "mac_output_volume_percent": 40
+  },
+  "installed_image": {
+    "image_sha256": "0c04e69d3ddc09c0f2ecbf3f3dda839f4bf4127ae5a3f25f329e6f629fc8487f",
+    "image_bytes": 1866352,
+    "product": "arcs-mini2-latency-batch",
+    "listenai_sdk_version": "0.1.8",
+    "wake_bundle": "xiaozhou-single-mic"
+  },
+  "summary": {
+    "batch:1200": {
+      "attempted": 1,
+      "voice_failed": 1,
+      "bench_errors": 1,
+      "acoustic_valid": 0,
+      "acoustic_rejected": 1,
+      "device_components_p50_ms": {}
+    }
+  },
+  "paired": {},
+  "trials": [
+    {
+      "index": 1,
+      "cycle": 1,
+      "mode": "batch",
+      "endpoint_ms": 1200,
+      "ok": false,
+      "bench_error": true,
+      "reply_diagnostics": {},
+      "acoustic": {
+        "acoustic_valid": false
+      }
+    }
+  ]
+}

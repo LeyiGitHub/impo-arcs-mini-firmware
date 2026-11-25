@@ -74,6 +74,21 @@ def parse_snapshot(text):
     return row
 
 
+def parse_reply_diagnostics(text, epoch):
+    row = {}
+    patterns = [
+        (r"voice_sub_turn epoch=(\d+) ready=(\d+) bytes=(\d+) lines=(\d+) complete=(\d+)",
+         ["ready", "bytes", "lines", "complete"]),
+        (r"voice_filter_turn epoch=(\d+) missing=(\d+) not_ready=(\d+) duplicate=(\d+) parent=(\d+) state=(\d+)",
+         ["missing_parent", "not_ready", "duplicate", "rejected_parent", "rejected_state"]),
+    ]
+    for pattern, keys in patterns:
+        for match in re.finditer(pattern, text):
+            if int(match[1]) == epoch:
+                row.update({k: int(v) for k, v in zip(keys, match.groups()[1:])})
+    return row
+
+
 class Shell:
     def __init__(self, adb, serial):
         self.proc = subprocess.Popen([adb, "-s", serial, "shell"], stdin=subprocess.PIPE,
@@ -172,7 +187,9 @@ def run_trial(sh, args, index, mode, pause):
             sh.drain(.1)
         else:
             raise RuntimeError("Voice turn timed out; result unknown, no retry")
+        sh.drain(.08)  # The bounded per-turn diagnostic lines follow the summary.
         text = sh.clean(sh.raw[start:])
+        result["reply_diagnostics"] = parse_reply_diagnostics(text, result["epoch"])
         result["chat_requests"] = len(re.findall(r"stream \d+: POST /chat/stream", text))
         result["tts_requests"] = len(re.findall(r"stream \d+: POST /tts", text))
         result["ok"] &= result["chat_requests"] == 1 and result["tts_requests"] == 1
@@ -206,6 +223,11 @@ def run_trial(sh, args, index, mode, pause):
             tail = chunk[-150:]
         snapshot = sh.command("voice_latency")
         result["stages"] = {int(k): int(v) for k, v in re.findall(r"voice stage=(\d+) mono_ms=(\d+)", snapshot)}
+        # Bind acoustic-tail alignment to this summary, even if automatic
+        # continuous capture has already replaced the shell's live snapshot.
+        for epoch, last_voice in re.findall(r"voice_capture_turn epoch=(\d+) last_voice=(\d+)", text):
+            if int(epoch) == result["epoch"] and int(result["valid"],16) & 1:
+                result["stages"][0] = int(last_voice)
     except KeyboardInterrupt:
         result["error"] = "Interrupted; partial trial retained, no retry"
         result["ok"] = False
@@ -234,7 +256,7 @@ def run_trial(sh, args, index, mode, pause):
             sh.idle()
         except Exception as e:
             result["cleanup_error"] = str(e)
-            result["error"] = "Cleanup failed; identify device before further trials"
+            result.setdefault("error", "Cleanup failed; identify device before further trials")
             result["ok"] = False
     return result
 

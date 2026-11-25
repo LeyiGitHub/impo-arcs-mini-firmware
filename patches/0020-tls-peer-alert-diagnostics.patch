@@ -1,0 +1,69 @@
+--- a/arcs/platform/arcs/plat_tls.c
++++ b/arcs/platform/arcs/plat_tls.c
+@@ -46,6 +46,7 @@
+     mbedtls_ssl_config conf;
+     mbedtls_ctr_drbg_context drbg;
+     mbedtls_entropy_context entropy;
++    uint64_t started_ms, last_tx_ms, last_rx_ms, tx_bytes, rx_bytes;
+ };
+ 
+ /* Parsed once and shared read-only by every connection. */
+@@ -112,6 +113,26 @@
+     LISA_LOGE(TAG, "%s: -0x%04x %s (errno %d)", what, -ret, msg, errno);
+ }
+ 
++static void log_stream_failure(plat_tls_t *t, const char *what, int ret)
++{
++    log_error(what, ret);
++    uint64_t now = plat_uptime_ms();
++    LISA_LOGE(TAG, "tls_progress phase=%s age_ms=%llu tx_bytes=%llu rx_bytes=%llu",
++        what, (unsigned long long)(now-t->started_ms),
++        (unsigned long long)t->tx_bytes, (unsigned long long)t->rx_bytes);
++    LISA_LOGE(TAG, "tls_idle tx_ms=%llu rx_ms=%llu",
++        (unsigned long long)(now-t->last_tx_ms), (unsigned long long)(now-t->last_rx_ms));
++    if (ret == MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE) {
++        /* Both pinned ListenAI ABIs use mbedTLS 2.x and retain this record
++         * until the next read. Expose only the alert's two numeric fields;
++         * never dump TLS application data, keys or request contents. */
++        if (t->ssl.in_msgtype == MBEDTLS_SSL_MSG_ALERT && t->ssl.in_msg && t->ssl.in_msglen == 2) {
++            LISA_LOGE(TAG, "tls_peer_alert level=%u description=%u",
++                (unsigned)t->ssl.in_msg[0], (unsigned)t->ssl.in_msg[1]);
++        } else LISA_LOGE(TAG, "tls_peer_alert unavailable");
++    }
++}
++
+ plat_tls_t *plat_tls_connect(const char *host, uint16_t port, uint32_t timeout_ms, int *err)
+ {
+     return plat_tls_connect_named(host, port, NULL, timeout_ms, err);
+@@ -145,6 +166,7 @@
+         }
+         return NULL;
+     }
++    t->started_ms = t->last_tx_ms = t->last_rx_ms = plat_uptime_ms();
+     mbedtls_net_init(&t->net);
+     mbedtls_ssl_init(&t->ssl);
+     mbedtls_ssl_config_init(&t->conf);
+@@ -235,9 +257,10 @@
+             continue;
+         }
+         if (ret < 0) {
+-            log_error("write", ret);
++            log_stream_failure(t, "write", ret);
+             return ret;
+         }
++        if (ret > 0) { t->tx_bytes += (uint32_t)ret; t->last_tx_ms = plat_uptime_ms(); }
+         p += ret;
+         left -= (size_t)ret;
+     }
+@@ -275,8 +298,9 @@
+             return 0;
+         }
+         if (ret < 0) {
+-            log_error("read", ret);
+-        }
++            log_stream_failure(t, "read", ret);
++        }
++        if (ret > 0) { t->rx_bytes += (uint32_t)ret; t->last_rx_ms = plat_uptime_ms(); }
+         return ret;
+     }
+ }

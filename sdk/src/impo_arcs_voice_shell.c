@@ -3,6 +3,7 @@
 #include <string.h>
 #include "shell.h"
 #include "impo_arcs_mini.h"
+#include "platform_arcs.h"
 
 static int voice_latency_cmd(int argc, char **argv)
 {
@@ -36,3 +37,23 @@ static int voice_latency_cmd(int argc, char **argv)
 }
 SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0) | SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN) | SHELL_CMD_DISABLE_RETURN,
                  voice_latency, voice_latency_cmd, voice latency or idle configuration);
+
+static int voice_diagnostics_cmd(int argc, char **argv)
+{
+    (void)argv;
+    if (argc != 1) return -1;
+    impo_arcs_voice_snapshot_t s;
+    impo_arcs_mini_voice_snapshot(&s);
+    shellPrint(shellGetCurrent(), "voice_sub ready=%u bytes=%u lines=%u complete=%u\n",
+        (unsigned)s.subscription_ready, (unsigned)s.subscription_bytes,
+        (unsigned)s.subscription_lines, (unsigned)s.complete_replies);
+    shellPrint(shellGetCurrent(), "voice_filter missing_parent=%u not_ready=%u duplicate=%u\n",
+        (unsigned)s.missing_parent, (unsigned)s.text_not_ready, (unsigned)s.duplicate_replies);
+    shellPrint(shellGetCurrent(), "voice_reject parent=%u state=%u shell_stack_free=%u\n",
+        (unsigned)s.rejected_parent, (unsigned)s.rejected_state,
+        (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t)));
+    plat_crash_report_previous();
+    return 0;
+}
+SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0) | SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN) | SHELL_CMD_DISABLE_RETURN,
+                 voice_diagnostics, voice_diagnostics_cmd, privacy-preserving reply and reset counters);

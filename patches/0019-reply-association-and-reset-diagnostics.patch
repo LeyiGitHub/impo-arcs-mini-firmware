@@ -1,0 +1,254 @@
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -82,6 +82,7 @@
+ static int s_note_status, s_note = -1;
+ static uint32_t s_epoch, s_session_epoch;
+ static _Atomic bool s_sub_open;
++static bool s_sub_ready;
+ static gadget_lines_t s_lines;
+ static gadget_chat_t s_chat;
+ 
+@@ -161,12 +162,24 @@
+ {
+     (void)ctx;
+     reply_t reply = {0};
++    uint32_t missing = s_chat.missing_parent, not_ready = s_chat.not_ready, duplicates = s_chat.duplicates;
+     reply.text = gadget_chat_feed(&s_chat, line, reply.parent);
+-    if (!reply.text) return;
+-    xSemaphoreTake(s_lock, portMAX_DELAY);
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (s_active) {
++        s_stats.subscription_lines++;
++        s_stats.missing_parent += s_chat.missing_parent - missing;
++        s_stats.text_not_ready += s_chat.not_ready - not_ready;
++        s_stats.duplicate_replies += s_chat.duplicates - duplicates;
++    }
++    if (!reply.text) { xSemaphoreGive(s_lock); return; }
++    if (s_active) s_stats.complete_replies++;
+     bool accept = s_active && !s_interrupt && !s_note_failed && reply.parent[0] &&
+         s_stats.session_epoch == s_session_epoch &&
+         (!s_acked || gadget_chat_reply_is_ours(reply.parent, &s_ack));
++    if (s_active && !accept) {
++        if (s_acked && reply.parent[0] && !gadget_chat_reply_is_ours(reply.parent, &s_ack)) s_stats.rejected_parent++;
++        else s_stats.rejected_state++;
++    }
+     reply.epoch = s_epoch;
+     reply.session_epoch = s_session_epoch;
+     reply.received_ms = plat_uptime_ms();
+@@ -187,10 +200,14 @@
+     gadget_chat_init(&s_chat);
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+     s_session_epoch++;
++    s_sub_ready = false;
+     xSemaphoreGive(s_lock);
+ }
+ static void sub_status(int status)
+ {
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    s_sub_ready = status == 200;
++    xSemaphoreGive(s_lock);
+     if (status != 200) {
+         xSemaphoreTake(s_lock, portMAX_DELAY);
+         if (s_active) fail_locked();
+@@ -199,6 +216,9 @@
+ }
+ static void sub_data(const unsigned char *d, size_t len)
+ {
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (s_active) s_stats.subscription_bytes += (uint32_t)len;
++    xSemaphoreGive(s_lock);
+     uint32_t dropped = s_lines.dropped;
+     if (s_lines.cap > 0) gadget_lines_feed(&s_lines, d, len);
+     if (s_lines.overflow || s_lines.dropped != dropped) {
+@@ -212,6 +232,7 @@
+     (void)error;
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+     s_session_epoch++;
++    s_sub_ready = false;
+     if (s_active) fail_locked(); /* no replay/cursor contract: terminate this turn */
+     s_sub_open = false;
+     xSemaphoreGive(s_lock);
+@@ -621,6 +642,15 @@
+         (unsigned long long)stats.stage_ms[IMPO_VOICE_SERVER_ACK],
+         (unsigned long long)stats.stage_ms[IMPO_VOICE_MESSAGE_DONE],
+         (unsigned long long)stats.stage_ms[IMPO_VOICE_TTS_REQUEST]);
++    /* Emit the same snapshot before the automatic next capture resets it. */
++    LISA_LOGI(TAG, "voice_sub_turn epoch=%u ready=%u bytes=%u lines=%u complete=%u",
++        (unsigned)stats.turn_epoch, (unsigned)stats.subscription_ready,
++        (unsigned)stats.subscription_bytes, (unsigned)stats.subscription_lines, (unsigned)stats.complete_replies);
++    LISA_LOGI(TAG, "voice_filter_turn epoch=%u missing=%u not_ready=%u duplicate=%u parent=%u state=%u",
++        (unsigned)stats.turn_epoch, (unsigned)stats.missing_parent, (unsigned)stats.text_not_ready,
++        (unsigned)stats.duplicate_replies, (unsigned)stats.rejected_parent, (unsigned)stats.rejected_state);
++    LISA_LOGI(TAG, "voice_capture_turn epoch=%u last_voice=%llu",
++        (unsigned)stats.turn_epoch, (unsigned long long)stats.stage_ms[IMPO_VOICE_LAST_VOICE]);
+     s_followup = test == NULL && s_session && complete && !s_stop && !s_interrupt;
+     if (!s_followup) {
+         end_turn(true);
+@@ -737,6 +767,7 @@
+     if (!out) return;
+     if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+     *out = s_stats;
++    out->subscription_ready = s_sub_ready;
+     if (s_active && s_stats.phase == IMPO_VOICE_PREPARING && gadget_sound_state() == GADGET_SOUND_PLAYING)
+         out->phase = IMPO_VOICE_PLAYING;
+     if (s_lock) xSemaphoreGive(s_lock);
+--- a/arcs/gadget/gadget_voice_logic.c
++++ b/arcs/gadget/gadget_voice_logic.c
+@@ -173,7 +173,7 @@
+     bool full = strcmp(ev, "message.assistant") == 0;
+     if ((start || done || full) && id != NULL) {
+         int m = find_msg(c, id, true);
+-        if (m >= 0 && par != NULL && strlen(par) < GADGET_CHAT_ID_MAX) {
++        if (m >= 0 && par != NULL && par[0] && strlen(par) < GADGET_CHAT_ID_MAX) {
+             strcpy(c->msg[m].parent, par);
+         }
+         const char *text = str_of(p, "display_text");
+@@ -181,7 +181,16 @@
+             text = str_of(p, "content");
+         }
+         bool ready = !cJSON_IsFalse(cJSON_GetObjectItem(p, "display_text_ready"));
+-        if ((done || full) && m >= 0 && !c->msg[m].done && ready && text != NULL && text[0] != '\0') {
++        if ((done || full) && m >= 0 && text != NULL && text[0] != '\0') {
++            if (c->msg[m].done) c->duplicates++;
++            else if (!ready) c->not_ready++;
++            else if (!c->msg[m].parent[0]) c->missing_parent++;
++        }
++        /* A later full event may provide the parent absent from message_done.
++         * Do not consume/deduplicate an unassociated completion: the caller must
++         * never speak it, and must still be able to accept its enriched repeat. */
++        if ((done || full) && m >= 0 && !c->msg[m].done && ready &&
++            c->msg[m].parent[0] && text != NULL && text[0] != '\0') {
+             size_t n = strlen(text) + 1;
+             out = malloc(n);
+             if (out != NULL) {
+--- a/arcs/gadget/gadget_voice_logic.h
++++ b/arcs/gadget/gadget_voice_logic.h
+@@ -86,12 +86,14 @@
+         bool done;              /* handed out already */
+     } msg[GADGET_CHAT_TRACK];
+     unsigned next;              /* ring slot to reuse */
++    uint32_t missing_parent, not_ready, duplicates;
+ } gadget_chat_t;
+ 
+ void gadget_chat_init(gadget_chat_t *c);
+ 
+-/* One subscription line. When it finishes an assistant message not handed out before, returns its
+- * text (malloc'd, the caller frees) and fills parent ("" when unknown); else NULL. */
++/* One subscription line. Emit a completed, ready, parent-associated answer once.
++ * Missing-parent completions return NULL without consuming a later enriched
++ * repeat. Returned text is malloc'd; the caller still matches parent to ACK. */
+ char *gadget_chat_feed(gadget_chat_t *c, const char *line, char parent[GADGET_CHAT_ID_MAX]);
+ 
+ /* Whether a reply with this parent belongs to the turn. Before the ack (ack NULL) or without a
+--- a/arcs/platform/arcs/crash_log.c
++++ b/arcs/platform/arcs/crash_log.c
+@@ -34,7 +34,22 @@
+     uint32_t check;
+ } crash_rec_t;
+ 
++#if defined(__riscv)
+ static crash_rec_t s_rec __attribute__((section(".noinit.gadget_crash")));
++#else
++static crash_rec_t s_rec; /* Native lifecycle tests do not model reset-retained SRAM. */
++#endif
++static crash_rec_t s_previous;
++static bool s_previous_valid;
++
++static void record_barrier(void)
++{
++#if defined(__riscv)
++    __asm__ volatile("fence rw, rw");
++#else
++    __atomic_thread_fence(__ATOMIC_SEQ_CST);
++#endif
++}
+ 
+ static uint32_t rec_check(const crash_rec_t *r)
+ {
+@@ -63,7 +78,7 @@
+     strncpy(s_rec.where, where, sizeof(s_rec.where) - 1);
+     s_rec.where[sizeof(s_rec.where) - 1] = '\0';
+     s_rec.check = rec_check(&s_rec);
+-    __asm__ volatile("fence rw, rw");
++    record_barrier();
+ }
+ 
+ void plat_crash_boot_stage(const char *stage)
+@@ -81,7 +96,7 @@
+     strncpy(s_rec.where, stage, sizeof(s_rec.where) - 1);
+     s_rec.where[sizeof(s_rec.where) - 1] = '\0';
+     s_rec.check = rec_check(&s_rec);
+-    __asm__ volatile("fence rw, rw");
++    record_barrier();
+ }
+ 
+ void plat_crash_boot_done(void)
+@@ -104,11 +119,19 @@
+     strncpy(s_rec.task, name ? name : "?", sizeof(s_rec.task) - 1);
+     s_rec.task[sizeof(s_rec.task) - 1] = '\0';
+     s_rec.check = rec_check(&s_rec);
+-    __asm__ volatile("fence rw, rw");
++    record_barrier();
+ }
+ 
+ void plat_crash_init(void)
+ {
++    /* Startup log lines can precede USB enumeration. Keep a read-only copy
++     * for this boot instead of losing the evidence after the one-shot log. */
++    s_previous_valid = s_rec.magic == CRASH_MAGIC && s_rec.check == rec_check(&s_rec);
++    if (s_previous_valid) {
++        s_previous = s_rec;
++        s_previous.task[sizeof(s_previous.task)-1] = '\0';
++        s_previous.where[sizeof(s_previous.where)-1] = '\0';
++    }
+     if (s_rec.magic == CRASH_MAGIC && s_rec.check == rec_check(&s_rec)) {
+         s_rec.task[sizeof(s_rec.task) - 1] = '\0';
+         if (s_rec.mcause == MCAUSE_BOOT) {
+@@ -135,3 +158,16 @@
+     }
+     Exception_User_Register_EXC((unsigned long)on_exception);
+ }
++
++void plat_crash_report_previous(void)
++{
++    if (!s_previous_valid) {
++        LISA_LOGI(TAG, "reset_record valid=0");
++        return; /* Absence does not prove a reset was clean or user initiated. */
++    }
++    LISA_LOGI(TAG, "reset_record valid=1 count=%u cause=%08x uptime_ms=%u",
++              (unsigned)s_previous.count, (unsigned)s_previous.mcause, (unsigned)s_previous.uptime_ms);
++    LISA_LOGI(TAG, "reset_pc mepc=%08x mtval=%08x mdcause=%08x",
++              (unsigned)s_previous.mepc, (unsigned)s_previous.mtval, (unsigned)s_previous.mdcause);
++    LISA_LOGI(TAG, "reset_task task=%s where=%s", s_previous.task, s_previous.where);
++}
+--- a/arcs/platform/arcs/platform_arcs.h
++++ b/arcs/platform/arcs/platform_arcs.h
+@@ -15,6 +15,8 @@
+ 
+ /* Report the crash record left by the previous boot, and arm the exception hook. */
+ void plat_crash_init(void);
++/* Reprint the retained previous-boot record after USB is available. No KV write. */
++void plat_crash_report_previous(void);
+ 
+ int plat_usb_start(void);
+ 
+--- a/arcs/tests/host/test_gadget_voice_logic.c
++++ b/arcs/tests/host/test_gadget_voice_logic.c
+@@ -133,7 +133,7 @@
+                                "\"a3\",\"display_text\":\"x\",\"display_text_ready\":false}}", parent) == NULL,
+           "not ready yet is skipped");
+     t = gadget_chat_feed(&c, "{\"type\":\"event\",\"event\":\"message.assistant\",\"payload\":{\"message_id\":"
+-                             "\"a3\",\"display_text\":\"now ready\"}}", parent);
++                             "\"a3\",\"parent_message_id\":\"m1\",\"display_text\":\"now ready\"}}", parent);
+     CHECK(t && strcmp(t, "now ready") == 0, "and handed out once it is ready");
+     free(t);
+     CHECK(gadget_chat_feed(&c, "{\"type\":\"subscribed\"}", parent) == NULL, "the subscription ack is skipped");
+@@ -141,7 +141,7 @@
+     for (int i = 0; i < 20; i++) {
+         char line[200];
+         snprintf(line, sizeof(line), "{\"type\":\"event\",\"event\":\"delta.message_done\",\"payload\":"
+-                 "{\"message_id\":\"z%d\",\"display_text\":\"t\"}}", i);
++                 "{\"message_id\":\"z%d\",\"parent_message_id\":\"m1\",\"display_text\":\"t\"}}", i);
+         free(gadget_chat_feed(&c, line, parent));
+     }
+     t = gadget_chat_feed(&c, "{\"type\":\"event\",\"event\":\"delta.message_done\",\"payload\":"

@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "metric": "fixed source last active frame to detected answer energy, automated acoustic proxy",
+  "stimulus_sha256": "07a63537492e497b4cf822daadb91446c5c126c28d6610a8e9c4f67c5620fb01",
+  "conditions": {
+    "modes": [
+      [
+        "batch",
+        1200
+      ]
+    ],
+    "cycles": 2,
+    "afplay_volume": 4.0,
+    "acoustic_capture": true,
+    "speaker_volume_percent": 70,
+    "mac_output_volume_percent": 40
+  },
+  "installed_image": {
+    "image_sha256": "ac2baf4cb322d91c5cbed6e408de5fe97c902d39a539ad96184ca868f18386e5",
+    "image_bytes": 1866352,
+    "product": "arcs-mini2-latency-batch",
+    "listenai_sdk_version": "0.1.8",
+    "wake_bundle": "xiaozhou-single-mic"
+  },
+  "summary": {
+    "batch:1200": {
+      "attempted": 2,
+      "voice_failed": 0,
+      "bench_errors": 0,
+      "acoustic_valid": 2,
+      "acoustic_rejected": 0,
+      "p50_ms": 14136,
+      "p95_ms": 15194,
+      "device_components_p50_ms": {
+        "last_voice_to_capture_ms": 1192,
+        "capture_to_queued_ms": 3300,
+        "queued_to_ack_ms": 1558,
+        "ack_to_text_ms": 4228,
+        "tts_to_first_pcm_ms": 2860,
+        "first_pcm_to_driver_write_ms": 439
+      }
+    }
+  },
+  "paired": {},
+  "trials": [
+    {
+      "index": 1,
+      "cycle": 1,
+      "mode": "batch",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "pcm": 184960,
+      "queued": 185004,
+      "backlog": 185004,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 1,
+      "audio_timing_generation_matches": true,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 1,
+        "bytes": 454,
+        "lines": 3,
+        "complete": 1,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": true,
+        "acoustic_gap_ms": 12961,
+        "stimulus_tail_seen": true,
+        "reference_correlation": 0.4838774522124238,
+        "answer_peak_to_noise": 20.40082974249376
+      }
+    },
+    {
+      "index": 2,
+      "cycle": 2,
+      "mode": "batch",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "pcm": 179840,
+      "queued": 179884,
+      "backlog": 179884,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 1,
+      "audio_timing_generation_matches": true,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 1,
+        "bytes": 454,
+        "lines": 3,
+        "complete": 1,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": true,
+        "acoustic_gap_ms": 15311,
+        "stimulus_tail_seen": true,
+        "reference_correlation": 0.5507993346291109,
+        "answer_peak_to_noise": 146.89895608441802
+      }
+    }
+  ]
+}

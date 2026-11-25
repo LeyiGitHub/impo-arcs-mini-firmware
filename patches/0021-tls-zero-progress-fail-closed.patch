@@ -1,0 +1,41 @@
+--- a/arcs/platform/arcs/plat_tls.c
++++ b/arcs/platform/arcs/plat_tls.c
+@@ -133,6 +133,15 @@
+     }
+ }
+ 
++static int tls_send(void *ctx, const unsigned char *buf, size_t len)
++{
++    int ret = mbedtls_net_send(ctx, buf, len);
++    /* mbedTLS's flush loop returns zero as success to ssl_write_real(), even
++     * when a zero-returning BIO left the record unfinished. Never acknowledge
++     * that unsent application data as written. */
++    return ret == 0 && len > 0 ? MBEDTLS_ERR_NET_CONN_RESET : ret;
++}
++
+ plat_tls_t *plat_tls_connect(const char *host, uint16_t port, uint32_t timeout_ms, int *err)
+ {
+     return plat_tls_connect_named(host, port, NULL, timeout_ms, err);
+@@ -207,7 +216,7 @@
+         log_error("setup", ret);
+         goto fail;
+     }
+-    mbedtls_ssl_set_bio(&t->ssl, &t->net, mbedtls_net_send, mbedtls_net_recv, NULL);
++    mbedtls_ssl_set_bio(&t->ssl, &t->net, tls_send, mbedtls_net_recv, NULL);
+ 
+     uint64_t hs_start = plat_uptime_ms();
+     while ((ret = mbedtls_ssl_handshake(&t->ssl)) != 0) {
+@@ -256,6 +265,13 @@
+             vTaskDelay(pdMS_TO_TICKS(POLL_MS));
+             continue;
+         }
++        if (ret == 0) {
++            /* A zero-byte send cannot advance a nonempty record. Treat the
++             * connection as unusable rather than spin forever; the caller
++             * must tear it down without replaying an unknown request. */
++            log_stream_failure(t, "write closed", MBEDTLS_ERR_NET_CONN_RESET);
++            return MBEDTLS_ERR_NET_CONN_RESET;
++        }
+         if (ret < 0) {
+             log_stream_failure(t, "write", ret);
+             return ret;

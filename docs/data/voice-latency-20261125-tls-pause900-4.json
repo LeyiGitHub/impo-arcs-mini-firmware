@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "metric": "fixed source last active frame to detected answer energy, automated acoustic proxy",
+  "stimulus_sha256": "c7d2a1f6904d06169c7407510642e25454233c8e7bb2349de033b2fd24aa55f9",
+  "conditions": {
+    "modes": [
+      [
+        "batch",
+        1200
+      ],
+      [
+        "overlap",
+        1200
+      ]
+    ],
+    "cycles": 2,
+    "afplay_volume": 4.0,
+    "acoustic_capture": true,
+    "speaker_volume_percent": 70,
+    "mac_output_volume_percent": 40
+  },
+  "installed_image": {
+    "image_sha256": "d3349ae1c697f9736ef4463932f3dbc8bbdec61604cbdfc2fb4bcb86e55233ad",
+    "image_bytes": 1866272,
+    "product": "arcs-mini2-latency-batch",
+    "listenai_sdk_version": "0.1.8",
+    "wake_bundle": "xiaozhou-single-mic"
+  },
+  "summary": {
+    "batch:1200": {
+      "attempted": 2,
+      "voice_failed": 0,
+      "bench_errors": 0,
+      "acoustic_valid": 2,
+      "acoustic_rejected": 0,
+      "p50_ms": 16798,
+      "p95_ms": 19533,
+      "device_components_p50_ms": {
+        "last_voice_to_capture_ms": 1202,
+        "capture_to_queued_ms": 6814,
+        "queued_to_ack_ms": 1254,
+        "ack_to_text_ms": 4363,
+        "tts_to_first_pcm_ms": 2466,
+        "first_pcm_to_driver_write_ms": 296
+      }
+    },
+    "overlap:1200": {
+      "attempted": 2,
+      "voice_failed": 0,
+      "bench_errors": 0,
+      "acoustic_valid": 2,
+      "acoustic_rejected": 0,
+      "p50_ms": 13340,
+      "p95_ms": 13619,
+      "device_components_p50_ms": {
+        "last_voice_to_capture_ms": 1190,
+        "capture_to_queued_ms": 2112,
+        "queued_to_ack_ms": 2422,
+        "ack_to_text_ms": 4635,
+        "tts_to_first_pcm_ms": 2330,
+        "first_pcm_to_driver_write_ms": 316
+      }
+    }
+  },
+  "paired": {
+    "pairs": 2,
+    "median_overlap_minus_batch_ms": -3459
+  },
+  "trials": [
+    {
+      "index": 1,
+      "cycle": 1,
+      "mode": "batch",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "pcm": 235520,
+      "queued": 235564,
+      "backlog": 235564,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 1,
+      "audio_timing_generation_matches": true,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 1,
+        "bytes": 454,
+        "lines": 3,
+        "complete": 1,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": true,
+        "acoustic_gap_ms": 13760,
+        "stimulus_tail_seen": true,
+        "reference_correlation": 0.45400899995211996,
+        "answer_peak_to_noise": 37.09649155958698
+      }
+    },
+    {
+      "index": 2,
+      "cycle": 1,
+      "mode": "overlap",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "pcm": 236160,
+      "queued": 236204,
+      "backlog": 88748,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 1,
+      "audio_timing_generation_matches": true,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 1,
+        "bytes": 454,
+        "lines": 3,
+        "complete": 1,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": true,
+        "acoustic_gap_ms": 13029,
+        "stimulus_tail_seen": true,
+        "reference_correlation": 0.503431858740061,
+        "answer_peak_to_noise": 36.87710280375746
+      }
+    },
+    {
+      "index": 3,
+      "cycle": 2,
+      "mode": "overlap",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "pcm": 236800,
+      "queued": 236844,
+      "backlog": 27948,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 1,
+      "audio_timing_generation_matches": true,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 1,
+        "bytes": 454,
+        "lines": 3,
+        "complete": 1,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": true,
+        "acoustic_gap_ms": 13650,
+        "stimulus_tail_seen": true,
+        "reference_correlation": 0.5438308727537516,
+        "answer_peak_to_noise": 27.210792856991564
+      }
+    },
+    {
+      "index": 4,
+      "cycle": 2,
+      "mode": "batch",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "pcm": 236800,
+      "queued": 236844,
+      "backlog": 236844,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 1,
+      "audio_timing_generation_matches": true,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 1,
+        "bytes": 454,
+        "lines": 3,
+        "complete": 1,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": true,
+        "acoustic_gap_ms": 19837,
+        "stimulus_tail_seen": true,
+        "reference_correlation": 0.5430501990877988,
+        "answer_peak_to_noise": 29.662534078753794
+      }
+    }
+  ]
+}

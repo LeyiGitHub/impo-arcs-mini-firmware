@@ -2,6 +2,8 @@
 
 基于 `447e107`，分支 `codex/voice-latency`。设计依据为 [VOICE_LATENCY_DESIGN.md](VOICE_LATENCY_DESIGN.md)。本阶段实现采集与上传解耦、回合关联、阶段查询及可配置端点；已在目标 Mini2 完成 60 次固定短问交错探索，结果与边界见验证记录。
 
+本轮后续关联修复、故障诊断及独立实测见 [2026-11-25记录](VOICE_LATENCY_PROGRESS_20261125.md)。
+
 ## 已实现
 
 - 保留最多 15 秒的完整 PSRAM 录音。采集任务只接收、做 VAD、追加 PCM；独立的 4 KiB 栈上传任务编码并通过官方 Link 请求队列发送。

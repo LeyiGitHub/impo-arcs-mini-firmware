@@ -3,10 +3,21 @@ import sys
 from pathlib import Path
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
-from voice_latency_bench import pending_trials,parse_snapshot
+from voice_latency_bench import pending_trials,parse_snapshot,parse_reply_diagnostics
 
 
 class ScheduleTests(unittest.TestCase):
+    def test_diagnostics_do_not_mix_the_continuous_next_turn(self):
+        text = """voice_sub_turn epoch=7 ready=1 bytes=2048 lines=8 complete=1
+voice_filter_turn epoch=7 missing=1 not_ready=0 duplicate=1 parent=0 state=0
+voice_sub_turn epoch=8 ready=1 bytes=0 lines=0 complete=0
+"""
+        row=parse_reply_diagnostics(text,7)
+        self.assertEqual(row["bytes"],2048)
+        self.assertEqual(row["missing_parent"],1)
+        self.assertEqual(row["complete"],1)
+        self.assertEqual(parse_reply_diagnostics(text,9),{})
+
     def test_short_snapshot_does_not_require_long_turn_log(self):
         text="""voice_turn boot=1234 epoch=134 session=3 (truncated)
 voice phase=0 boot=1234 epoch=134 session=3 overlap=0 valid=87 failed=0

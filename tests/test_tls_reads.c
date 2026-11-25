@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 #include "mbedtls/ssl.h"
 #include "mbedtls/net_sockets.h"
 #include "mbedtls/ctr_drbg.h"
@@ -16,9 +17,12 @@ static uint64_t now_ms;
 static int outcomes[8];
 static size_t outcomes_n;
 static unsigned socket_option_calls;
+static int net_send_result = -999;
+static int (*net_send_hook)(void *, const unsigned char *, size_t);
 static int socket_option_result;
 static char dial_host[128], dial_port[8];
 static int handshake_result;
+static char log_output[8192];
 static int fake_handshake(mbedtls_ssl_context *ssl)
 {
     assert(ssl->conf->authmode == MBEDTLS_SSL_VERIFY_REQUIRED);
@@ -27,6 +31,20 @@ static int fake_handshake(mbedtls_ssl_context *ssl)
     return handshake_result;
 }
 static bool real_read;
+static bool real_write;
+static unsigned write_calls;
+static int write_result;
+static const unsigned char *expected_write;
+static size_t expected_write_len;
+static int real_ssl_write(mbedtls_ssl_context *ssl, const unsigned char *buf, size_t len)
+{ return mbedtls_ssl_write(ssl, buf, len); }
+static int fake_ssl_write(mbedtls_ssl_context *ssl, const unsigned char *buf, size_t len)
+{
+    if (real_write) return real_ssl_write(ssl, buf, len);
+    assert(buf == expected_write && len == expected_write_len);
+    assert(++write_calls < 10000);
+    return write_result;
+}
 static unsigned recv_calls;
 static int real_ssl_read(mbedtls_ssl_context *ssl, unsigned char *buf, size_t len)
 { return mbedtls_ssl_read(ssl, buf, len); }
@@ -41,17 +59,22 @@ static int fake_ssl_read(mbedtls_ssl_context *ssl, unsigned char *buf, size_t le
 #define taskENTER_CRITICAL() ((void)0)
 #define taskEXIT_CRITICAL() ((void)0)
 #define mbedtls_ssl_read fake_ssl_read
+#define mbedtls_ssl_write fake_ssl_write
 #define mbedtls_ssl_handshake fake_handshake
 #define mbedtls_ctr_drbg_seed fake_seed
 #include "../upstream/arcs/platform/arcs/plat_tls.c"
 #undef mbedtls_ssl_read
+#undef mbedtls_ssl_write
 #undef mbedtls_ssl_handshake
 #undef mbedtls_ctr_drbg_seed
 
 uint64_t plat_uptime_ms(void) { return now_ms; }
 bool plat_time_synced(void) { return true; }
 void vTaskDelay(unsigned ms) { now_ms += ms; delays += ms; }
-void test_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
+void test_log(const char *tag, const char *fmt, ...) {
+    (void)tag;size_t used=strlen(log_output);va_list ap;va_start(ap,fmt);
+    vsnprintf(log_output+used,sizeof(log_output)-used,fmt,ap);va_end(ap);
+}
 int closesocket(int fd) { (void)fd; return 0; }
 int sal_setsockopt(int fd, int level, int option, const void *value, socklen_t size)
 {
@@ -69,7 +92,10 @@ void mbedtls_net_init(mbedtls_net_context *c) { c->fd = -1; }
 void mbedtls_net_free(mbedtls_net_context *c) { (void)c; }
 int mbedtls_net_set_nonblock(mbedtls_net_context *c) { (void)c; return 0; }
 int mbedtls_net_send(void *c, const unsigned char *b, size_t n)
-{ (void)c; (void)b; return (int)n; }
+{
+    if (net_send_result != -999) return net_send_result;
+    return net_send_hook ? net_send_hook(c,b,n) : (int)n;
+}
 int mbedtls_net_recv(void *c, unsigned char *b, size_t n)
 { (void)c; (void)b; (void)n; recv_calls++; return MBEDTLS_ERR_SSL_WANT_READ; }
 int mbedtls_net_recv_timeout(void *c, unsigned char *b, size_t n, uint32_t ms)
@@ -79,6 +105,7 @@ static int test_rng(void *ctx, unsigned char *buf, size_t len)
 
 static void sequence(int a, int b, size_t n)
 { outcomes[0] = a; outcomes[1] = b; outcomes_n = n; calls = delays = 0; now_ms = 0; }
+#include "test_tls_wire.h"
 int main(void)
 {
     plat_tls_t t = {0}; unsigned char buf[64];
@@ -100,18 +127,37 @@ int main(void)
     sequence(MBEDTLS_ERR_SSL_WANT_READ, 12, 2);
     assert(plat_tls_read(&t, buf, sizeof(buf), 100) == 12);
     assert(calls == 2 && delays == 10);
+    assert(t.rx_bytes==12 && t.last_rx_ms==10);
     sequence(MBEDTLS_ERR_SSL_TIMEOUT, 0, 1);
     assert(plat_tls_read(&t, buf, sizeof(buf), 100) == PLAT_TLS_TIMEOUT && delays == 0);
     sequence(MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY, 0, 1);
     assert(plat_tls_read(&t, buf, sizeof(buf), 0) == 0);
     sequence(-0x7400, 0, 1);
     assert(plat_tls_read(&t, buf, sizeof(buf), 0) == -0x7400);
+    unsigned char alert[] = {MBEDTLS_SSL_ALERT_LEVEL_FATAL, MBEDTLS_SSL_ALERT_MSG_INTERNAL_ERROR};
+    t.ssl.in_msg=alert;t.ssl.in_msglen=2;t.ssl.in_msgtype=MBEDTLS_SSL_MSG_ALERT;
+    sequence(MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE,0,1);now_ms=100;
+    log_output[0]=0;
+    assert(plat_tls_read(&t,buf,sizeof(buf),0)==MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE);
+    assert(strstr(log_output,"level=2 description=80") && strstr(log_output,"rx_bytes=12"));
+    alert[1]=MBEDTLS_SSL_ALERT_MSG_BAD_RECORD_MAC;log_output[0]=0;
+    assert(plat_tls_read(&t,buf,sizeof(buf),0)==MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE);
+    assert(strstr(log_output,"level=2 description=20"));
+    t.ssl.in_msglen=1;log_output[0]=0;
+    assert(plat_tls_read(&t,buf,sizeof(buf),0)==MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE);
+    assert(strstr(log_output,"tls_peer_alert unavailable") && !strstr(log_output,"description="));
+    /* Do not expose arbitrary application bytes when no alert record exists. */
+    t.ssl.in_msg=(unsigned char *)"PRIVATE-TLS-PAYLOAD";t.ssl.in_msgtype=MBEDTLS_SSL_MSG_APPLICATION_DATA;
+    t.ssl.in_msglen=19;log_output[0]=0;
+    assert(plat_tls_read(&t,buf,sizeof(buf),0)==MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE);
+    assert(!strstr(log_output,"PRIVATE-TLS-PAYLOAD"));
     /* Exercise the real TLS configuration while replacing the network handshake.
      * The socket peer and verified/SNI identity must stay independent. */
     int err = 0;
     plat_tls_t *named = plat_tls_connect_named("gadget.itoy.cn", 9443, "gw.itoy.cn", 5000, &err);
     assert(named && !err && !strcmp(dial_host,"gadget.itoy.cn") && !strcmp(dial_port,"9443"));
     assert(!strcmp(named->ssl.hostname,"gw.itoy.cn"));
+    assert(named->ssl.f_send == tls_send);
     /* Let real mbedTLS start its handshake against a quiet peer. Both a poll
      * and a bounded read must yield through the configured socket BIO. */
     mbedtls_ssl_conf_rng(&named->conf, test_rng, NULL);
@@ -141,6 +187,22 @@ int main(void)
     handshake_result = MBEDTLS_ERR_X509_CERT_VERIFY_FAILED;
     assert(!plat_tls_connect_named("gadget.itoy.cn",9443,"gw.itoy.cn",5000,&err));
     assert(err == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED);
+    expected_write = buf; expected_write_len = sizeof(buf);
+    write_calls = delays = 0; write_result = 0;
+    assert(plat_tls_write(&t, buf, sizeof(buf)) == MBEDTLS_ERR_NET_CONN_RESET);
+    assert(write_calls == 1 && delays == 0);
+    net_send_result = 0;
+    assert(tls_send(&t.net, buf, sizeof(buf)) == MBEDTLS_ERR_NET_CONN_RESET);
+    assert(tls_send(&t.net, buf, 0) == 0);
+    net_send_result = MBEDTLS_ERR_SSL_WANT_WRITE;
+    assert(tls_send(&t.net, buf, sizeof(buf)) == MBEDTLS_ERR_SSL_WANT_WRITE);
+    net_send_result = -999;
+    write_result = MBEDTLS_ERR_SSL_WANT_WRITE; now_ms = delays = write_calls = 0;
+    assert(plat_tls_write(&t, buf, sizeof(buf)) == MBEDTLS_ERR_SSL_TIMEOUT);
+    assert(delays <= WRITE_TIMEOUT_MS + POLL_MS && write_calls > 1);
+    write_calls = 0; write_result = MBEDTLS_ERR_NET_SEND_FAILED;
+    assert(plat_tls_write(&t, buf, sizeof(buf)) == MBEDTLS_ERR_NET_SEND_FAILED);
+    test_tls_wire();
     puts("TLS route: separate peer/SNI, required certificate verification and failure propagation passed");
     puts("TLS reads: nonblocking WANT_READ/WANT_WRITE, deadline, data, timeout, close and errors passed");
     puts("TLS real receive BIO: quiet peer yields immediately and honors the caller deadline");

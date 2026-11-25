@@ -32,6 +32,11 @@ typedef struct {
     uint32_t pcm_bytes, queued_bytes, capture_end_backlog_bytes, mic_dropped_bytes;
     uint32_t upload_stack_free_bytes;
     bool upload_overlap, failed;
+    /* Per-turn subscription counters; no answer text or message identifiers. */
+    uint32_t subscription_bytes, subscription_lines, complete_replies;
+    uint32_t missing_parent, text_not_ready, duplicate_replies;
+    uint32_t rejected_parent, rejected_state;
+    bool subscription_ready;
 } impo_arcs_voice_snapshot_t;
 
 /* Task context. Configuration is accepted only between turns. No automatic

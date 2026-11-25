@@ -7,6 +7,9 @@ board=firmware/boards/arcs_mini_yunbao/gadget
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$board" tests/test_yunbao_button.c "$board/yunbao_button.c" -o "$output/button"
 "$output/button"
 python3 tools/prepare_sdk.py
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Itests/crash_stubs -Itests/audio_stubs \
+  tests/test_crash_record.c -o "$output/crash"
+"$output/crash"
 gadget=upstream/arcs/gadget
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Isdk/include -Itests/audio_stubs -I"$gadget" -I"$board" -Iupstream/arcs/products/yunbao \
   tests/test_yunbao_screen.c "$board/yunbao_screen_ui.c" -o "$output/screen"

@@ -2,6 +2,8 @@
 
 日期：2026-11-24。基线源码 `447e107`，优化分支 `codex/voice-latency`。功能说明和未实现阶段见 [实施说明](VOICE_LATENCY_IMPLEMENTATION.md)。
 
+最新一轮实现、镜像和数据见 [2026-11-25记录](VOICE_LATENCY_PROGRESS_20261125.md)。以下保留2026-11-24的独立结果。
+
 ## 本轮复测与 SDK 整理
 
 在未改变语音运行实现的普通 overlap 镜像上补测。固定短问再做四对，8/8 完成

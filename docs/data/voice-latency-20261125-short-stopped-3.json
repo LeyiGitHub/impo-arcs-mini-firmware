@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "metric": "fixed source last active frame to detected answer energy, automated acoustic proxy",
+  "stimulus_sha256": "07a63537492e497b4cf822daadb91446c5c126c28d6610a8e9c4f67c5620fb01",
+  "conditions": {
+    "modes": [
+      [
+        "batch",
+        1200
+      ],
+      [
+        "overlap",
+        1200
+      ]
+    ],
+    "cycles": 2,
+    "afplay_volume": 4.0,
+    "acoustic_capture": true,
+    "speaker_volume_percent": 70,
+    "mac_output_volume_percent": 40
+  },
+  "installed_image": {
+    "image_sha256": "9eea546015f4b4bdcd496538d5baeff61cb5eb751597cf64d531603659757288",
+    "image_bytes": 1865664,
+    "product": "arcs-mini2-latency-batch",
+    "listenai_sdk_version": "0.1.8",
+    "wake_bundle": "xiaozhou-single-mic"
+  },
+  "summary": {
+    "batch:1200": {
+      "attempted": 1,
+      "voice_failed": 0,
+      "bench_errors": 0,
+      "acoustic_valid": 1,
+      "acoustic_rejected": 0,
+      "p50_ms": 19929,
+      "p95_ms": 19929,
+      "device_components_p50_ms": {
+        "last_voice_to_capture_ms": 1201,
+        "capture_to_queued_ms": 9937,
+        "queued_to_ack_ms": 1170,
+        "ack_to_text_ms": 4262,
+        "tts_to_first_pcm_ms": 2791,
+        "first_pcm_to_driver_write_ms": 199
+      }
+    },
+    "overlap:1200": {
+      "attempted": 2,
+      "voice_failed": 1,
+      "bench_errors": 0,
+      "acoustic_valid": 1,
+      "acoustic_rejected": 1,
+      "p50_ms": 11330,
+      "p95_ms": 11330,
+      "device_components_p50_ms": {
+        "last_voice_to_capture_ms": 1181,
+        "capture_to_queued_ms": 73,
+        "queued_to_ack_ms": 2922,
+        "ack_to_text_ms": 4019,
+        "tts_to_first_pcm_ms": 2426,
+        "first_pcm_to_driver_write_ms": 173
+      }
+    }
+  },
+  "paired": {
+    "pairs": 1,
+    "median_overlap_minus_batch_ms": -8599
+  },
+  "trials": [
+    {
+      "index": 1,
+      "cycle": 1,
+      "mode": "batch",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "pcm": 179840,
+      "queued": 179884,
+      "backlog": 179884,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 1,
+      "audio_timing_generation_matches": true,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 1,
+        "bytes": 454,
+        "lines": 3,
+        "complete": 1,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": true,
+        "acoustic_gap_ms": 19929,
+        "stimulus_tail_seen": true,
+        "reference_correlation": 0.5820471654196665,
+        "answer_peak_to_noise": 120.42898687949902
+      }
+    },
+    {
+      "index": 2,
+      "cycle": 1,
+      "mode": "overlap",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "pcm": 181120,
+      "queued": 181164,
+      "backlog": 2988,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 1,
+      "audio_timing_generation_matches": true,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 1,
+        "bytes": 454,
+        "lines": 3,
+        "complete": 1,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": true,
+        "acoustic_gap_ms": 11330,
+        "stimulus_tail_seen": true,
+        "reference_correlation": 0.5192937231460243,
+        "answer_peak_to_noise": 161.25114536384166
+      }
+    },
+    {
+      "index": 3,
+      "cycle": 2,
+      "mode": "overlap",
+      "endpoint_ms": 1200,
+      "ok": false,
+      "voice_ok": false,
+      "failed": 1,
+      "pcm": 128640,
+      "queued": 122880,
+      "backlog": 5804,
+      "dropped": 0,
+      "chat_requests": 1,
+      "tts_requests": 0,
+      "bench_error": false,
+      "reply_diagnostics": {
+        "ready": 0,
+        "bytes": 0,
+        "lines": 0,
+        "complete": 0,
+        "missing_parent": 0,
+        "not_ready": 0,
+        "duplicate": 0,
+        "rejected_parent": 0,
+        "rejected_state": 0
+      },
+      "acoustic": {
+        "acoustic_valid": false
+      }
+    }
+  ]
+}

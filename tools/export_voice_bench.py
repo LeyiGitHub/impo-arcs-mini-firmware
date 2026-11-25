@@ -18,6 +18,10 @@ def export(directory):
                   "chat_requests", "tts_requests", "audio_timing_generation_matches")
                  if k in row}
         trial["bench_error"] = bool(row.get("error") or row.get("record_error"))
+        trial["reply_diagnostics"] = {k: row.get("reply_diagnostics", {})[k] for k in
+                                     ("ready", "bytes", "lines", "complete", "missing_parent",
+                                      "not_ready", "duplicate", "rejected_parent", "rejected_state")
+                                     if k in row.get("reply_diagnostics", {})}
         trial["acoustic"] = {k: acoustic[k] for k in
                              ("acoustic_valid", "acoustic_gap_ms", "stimulus_tail_seen",
                               "reference_correlation", "answer_peak_to_noise")

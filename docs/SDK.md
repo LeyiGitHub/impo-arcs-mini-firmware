@@ -140,6 +140,14 @@ impo_arcs_mini_voice_snapshot(&snapshot);
 进入本地队列，不是服务端已收到；`mic_dropped_bytes` 只覆盖云端收音，不能替代
 唤醒输入丢弃计数。先检查 `failed` 和完整阶段，再计算延迟。
 
+`voice_diagnostics` 可只读查看订阅就绪状态、每轮字节/行数和回复过滤计数，以及
+前一启动保留的异常记录。`complete_replies` 是解析到的有关联完成事件数，须结合
+拒绝计数及回合结果判断；不等同于已经播报。`subscription_ready` 是查询时状态。
+连续会话的下一轮可能覆盖实时快照，基准工具使用带回合编号的摘要，不混用两轮。
+缺少关联的完整事件不会提前去重，补齐关联后仍须通过 ACK 匹配。
+新增字段要求应用与本 SDK 头文件重新编译；详见
+[2026-11-25实施与验证](VOICE_LATENCY_PROGRESS_20261125.md)。
+
 首 TTS 字节、首 PCM 和驱动首次写入另有带声音代次的日志；驱动写入不代表声学
 首声。测试方法见 [固定语料工具](VOICE_LATENCY_BENCH.md)。普通应用不包含
 `examples/voice_latency_probe` 诊断订阅。按句 TTS、预取及自适应起播尚未实现。

@@ -17,6 +17,7 @@ class ExportTests(unittest.TestCase):
                     "paired": {"private": secret}, "trials": [
                         {"index": 1, "mode": "overlap", "ok": False, "failed": 1,
                          "error": secret, "boot": secret, "raw_log": secret,
+                         "reply_diagnostics": {"bytes": 77, "raw_log": secret},
                          "acoustic": {"acoustic_valid": False, "error": secret}}]}
         manifest = {"stimulus_sha256": "0" * 64, "device_id": secret,
                     "installed_image": {"image_sha256": "1" * 64, "token": secret}}
@@ -30,6 +31,7 @@ class ExportTests(unittest.TestCase):
         self.assertFalse(result["trials"][0]["ok"])
         self.assertTrue(result["trials"][0]["bench_error"])
         self.assertEqual(result["summary"]["overlap:1200"]["voice_failed"], 1)
+        self.assertEqual(result["trials"][0]["reply_diagnostics"], {"bytes": 77})
 
 
 if __name__ == "__main__":
