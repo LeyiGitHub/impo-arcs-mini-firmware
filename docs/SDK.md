@@ -1,8 +1,8 @@
-# Impo ARCS Mini SDK 0.1.0
+# Impo ARCS Mini SDK 0.2.3
 
 本 SDK 面向与当前云宝相同接线的 Arcs-Mini2：LS26、240×240 ST7789P3 屏幕、PB04 主功能键、PA01 扬声器功放、左声道麦克风。产品名称、平台产品 ID、对话说明、连续对话和唤醒资源由产品配置决定。`arcs_mini_yunbao` 是保留的硬件构建标识，不再决定产品名称或唤醒词。同款硬件共用源码；保留原机 AP 时按其运行时选择聆思 0.1.6 或 0.1.8 构建，不承诺同一个二进制跨版本通刷。
 
-本项目 SDK **0.1.0** 与聆思底层 SDK **0.1.6 / 0.1.8** 分别编号。公共 C/C++ 接口和源码共用，两种底层依赖、版本配置及固件产物分开，详见 [SDK 版本对照](SDK_VERSIONS.md)。
+本项目 SDK **0.2.3** 与聆思底层 SDK **0.1.6 / 0.1.8** 分别编号。公共 C/C++ 接口和源码共用，两种底层依赖、版本配置及固件产物分开，详见 [SDK 版本对照](SDK_VERSIONS.md)。
 
 官方 ESP32 也以 [Device SDK](https://github.com/impoai/impo-gadget-sdk/tree/main/esp32) 名义交付完整固件、通用组件、板级描述和构建配置。本项目沿用该组织方式，继续调用固定官方 SDK 的配对、Noise、语音和国内路由代码。它是社区 ARCS 适配 SDK，依赖开发者另行提供的 ListenAI SDK；不是一个脱离这些依赖的二进制库。
 
@@ -27,7 +27,7 @@
 - `impo_arcs_mini_set_wake_enabled(bool)`、`impo_arcs_mini_wake_available()`：暂停/恢复已初始化的本地唤醒及读取可用性。产品关闭唤醒或初始化失败时不能凭此启用引擎。
 - `impo_arcs_mini_send_event()`：沿用官方事件及 JSON 所有权约定。
 
-接口用于任务上下文。应用的 `impo_arcs_mini_application()` 返回静态描述，可增加官方格式的 `gadget_command_t`、`gadget_event_t`，提供初始化和状态回调。`on_init` 在板级初始化中运行，此时音频和网络尚未就绪；`on_status` 在 SDK 状态任务上运行，必须快速返回。长任务放到应用自己的 FreeRTOS 任务。标准命令、协议和 `main()` 均继续由官方工程管理。
+接口用于任务上下文。应用的 `impo_arcs_mini_application()` 返回静态描述，可增加官方格式的 `gadget_command_t`、`gadget_event_t`，提供初始化、状态、100 ms tick 和短按所有权回调。`on_tick` 运行于 SDK 状态任务，必须有界且快速返回；`on_button` 返回 true 时消费本次短按，长按电源策略仍由板级处理。`on_init` 在板级初始化中运行，此时音频和网络尚未就绪；`on_status` 在 SDK 状态任务上运行，必须快速返回。长任务放到应用自己的 FreeRTOS 任务。标准命令、协议和 `main()` 均继续由官方工程管理。
 
 ## 构建默认产品
 
@@ -80,7 +80,7 @@ python3 tools/build.py --docker \
   --app-dir examples/button_companion
 ```
 
-示例产物位于 `upstream/arcs/build-mini-companion/impo-gadget.bin`。未传 `--app-dir` 时使用空应用；传入时，目录必须包含 `CMakeLists.txt` 并实现 `impo_arcs_mini_application()`。不复制或修改 SDK 主流程。
+示例产物位于 `upstream/arcs/build-mini-companion/impo-gadget.bin`。未传 `--app-dir` 时使用默认 companion 应用（20 条命令和 5 类可选事件，见 [能力说明](COMPANION_CAPABILITIES.md)）；传入时，目录必须包含 `CMakeLists.txt` 并实现 `impo_arcs_mini_application()`。不复制或修改 SDK 主流程。
 
 产品说明随清单在 Impo 开发者平台配置；编译 CP 不会自动更新云端产品定义。
 
@@ -99,12 +99,21 @@ python3 tools/build.py --docker \
 
 ## 语音上传与阶段查询
 
+2026-11-26 的接入优化候选新增 `impo_arcs_mini_configure_voice_tail(keep_ms)`：
+0 关闭（默认），200～1000 ms 在正常 batch 静音端点后保留对应尾部余量；会话忙、
+overlap 或非法参数返回 −1。不会缩短端点，不写 KV。WS 写入合并、TTS 每请求
+120 码点上限、长回复缓冲修正及完整验收方案见[云端接入优化](IMPO_CLOUD_OPTIMIZATION_20261126.md)。
+
 优化属于公共 SDK：产品选择策略，应用不复制采集、Link、Noise、WAV/Base64 或
 TTS 主流程。较长输入复测曾出现 ACK 后无完整回复及设备重启，尚未通过稳定性门槛；
 `overlap` 仅作为显式实验选项。默认 `batch` 在收音结束后上传；显式选择 `overlap` 后，在确认语音时
 开始同一笔上传。两种模式都保留完整 PSRAM 录音和有界取消；未知结果不自动重发。
 当前官方网关的兼容检查和收益见 [实测记录](VOICE_LATENCY_VALIDATION.md)，不能
-自动推广到其他网关或设备。`/tts`、音色和播放缓冲策略未改。
+自动推广到其他网关或设备。此上传配置沿用官方 `/tts` 和音色；播放缓冲策略另见下文。
+
+`overlap` 表示采集与文件上传重叠，不声明云端实时识别。当前未核实到设备可调用的
+流式 ASR 契约；官方主线、在线说明及云端需要补充的接口和验收条件见
+[云端流式输入核验](CLOUD_STREAMING_INPUT_AUDIT_20261125.md)。
 
 ```json
 "voice": {"upload_mode": "overlap", "endpoint_pause_ms": 1200}
@@ -151,6 +160,26 @@ impo_arcs_mini_voice_snapshot(&snapshot);
 首 TTS 字节、首 PCM 和驱动首次写入另有带声音代次的日志；驱动写入不代表声学
 首声。测试方法见 [固定语料工具](VOICE_LATENCY_BENCH.md)。普通应用不包含
 `examples/voice_latency_probe` 诊断订阅。播放接收解耦、阈值起播及完整最终文字的分段预取见 [播放阶段优化](PLAYBACK_OPTIMIZATION.md)。
+
+### 可选的增量回复播报
+
+`impo_arcs_mini_configure_reply(true)` 可在初始化或整段会话空闲时启用实验增量模式，
+返回 0 表示接受，忙时返回 −1；`false` 恢复全文模式。重启默认全文，不写 KV，
+无需复制官方订阅、TTS 或播放流程。模式独立于 `sentence_tts`；后者切分已经完成的
+最终文字，增量模式消费生成期间的完整句子。
+
+首段至少 24 个 Unicode 码点并等待 150 ms 合并窗口，后续未完成段至少 48 个码点；
+最终文字到达后提交精确剩余后缀。队列有界、一次一个官方 TTS，同一声音代次保留
+先前 PCM。文字修订或资源不足会明确失败，不自动重播已提交的回答。需要服务端
+提供稳定的可见文字增量；有限样本的前缀一致不能替代协议保证。
+
+`reply_stream [full|incremental]` 提供空闲时切换及查询。`voice_diagnostics` 和快照中的
+`reply_probe`、`reply_segments`、`reply_mismatches` 提供无原文的诊断。增量模式下阶段 6
+可能早于阶段 5，时间区间有重叠；应用需随新增头文件重新编译。
+最终合并策略已完成八轮语音采样，四轮增量均分段播放、无欠载；严格首声配对仅
+一组，尚不足以证明稳定收益，保持 **full 默认值**。实际提前量、早期欠载和验收
+边界见[增量改造记录](INCREMENTAL_REPLY_20261125.md)及
+[最终镜像语音验证](INCREMENTAL_REPLY_VALIDATION_20261125.md)。
 
 ## 更换唤醒词
 

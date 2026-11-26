@@ -11,7 +11,7 @@ static char logs[4096];
 static void (*exception_hook)(void);
 static uint32_t test_csr_read(unsigned csr) { static const uint32_t values[]={2,0x30001234,0x44,5};return values[csr]; }
 uint64_t plat_uptime_ms(void) { return 1234; }
-TickType_t xTaskGetTickCountFromISR(void) { return 5678; }
+TickType_t xTaskGetTickCountFromISR(void) { assert(!"exception hook must not call ISR APIs");return 5678; }
 TaskHandle_t xTaskGetCurrentTaskHandle(void) { return (void *)1; }
 const char *pcTaskGetName(TaskHandle_t task) { (void)task;return "link_test"; }
 void Exception_User_Register_EXC(unsigned long handler) { exception_hook=(void (*)(void))handler; }
@@ -26,7 +26,7 @@ int main(void)
     plat_crash_report_previous();assert(strstr(logs,"reset_record valid=0"));
     exception_hook();assert(s_rec.check==rec_check(&s_rec));
     plat_crash_init();assert(s_previous_valid && !s_rec.magic);
-    assert(s_previous.mcause==2 && s_previous.mepc==0x30001234 && s_previous.uptime_ms==5678);
+    assert(s_previous.mcause==2 && s_previous.mepc==0x30001234 && s_previous.uptime_ms==0);
     assert(!strcmp(s_previous.task,"link_test"));
     plat_crash_boot_stage("new boot");plat_crash_boot_done();
     logs[0]=0;plat_crash_report_previous();assert(strstr(logs,"cause=00000002") && strstr(logs,"mepc=30001234"));

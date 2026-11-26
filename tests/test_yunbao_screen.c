@@ -24,6 +24,13 @@ int main(int argc, char **argv)
 {
     uint16_t *p = storage+1;
     storage[0] = 0xa55a; storage[N+1] = 0x5aa5;
+    assert(impo_arcs_companion_text_supported("冬天穿暖和\n刷牙两分钟"));
+    assert(impo_arcs_companion_text_supported("123456789012345678901234567890123456789"));
+    assert(!impo_arcs_companion_text_supported("1234567890123456789012345678901234567890"));
+    assert(!impo_arcs_companion_text_supported("😀"));
+    assert(!impo_arcs_companion_text_supported("\xe4\xb8"));
+    assert(!impo_arcs_companion_text_supported("\xc0\xaf"));
+    assert(!impo_arcs_companion_text_supported("a\nb\nc\nd"));
     memset(p, 0x47, sizeof(previous));
     memcpy(previous, p, sizeof(previous));
     assert(!yunbao_screen_render(NULL, 240, 240, GADGET_STATUS_IDLE, 0, false, true, false));
@@ -32,6 +39,23 @@ int main(int argc, char **argv)
     assert(memcmp(previous, p, sizeof(previous)) == 0); guards();
     /* Exercise every SDK state, blink boundary, animation phase and uptime wrap. */
     const uint32_t times[] = { 0, 400, 500, 1000, 4799, 4800, 4999, 5000, UINT32_MAX };
+    impo_arcs_companion_view_t companion={0};
+    const char *const expressions[]={"happy","sad","surprised","sleepy","curious","wink"};
+    for(unsigned i=0;i<sizeof(expressions)/sizeof(*expressions);i++) {
+        strcpy(companion.expression,expressions[i]);
+        assert(yunbao_screen_render_companion(p,240,240,GADGET_STATUS_IDLE,1000,false,true,false,IMPO_VOICE_IDLE,&companion));
+        guards();preview(argc>1?argv[1]:NULL,expressions[i],p);
+    }
+    strcpy(companion.text,"冬天穿暖和\n刷牙两分钟");
+    assert(yunbao_screen_render_companion(p,240,240,GADGET_STATUS_IDLE,1000,false,true,false,IMPO_VOICE_IDLE,&companion));
+    guards();preview(argc>1?argv[1]:NULL,"card",p);
+    companion.text[0]=0;companion.timer_running=true;companion.timer_remaining=125;
+    assert(yunbao_screen_render_companion(p,240,240,GADGET_STATUS_IDLE,1000,false,true,false,IMPO_VOICE_IDLE,&companion));
+    guards();preview(argc>1?argv[1]:NULL,"timer",p);
+    assert(yunbao_screen_render_voice(p,240,240,GADGET_STATUS_OFFLINE,1000,false,true,false,IMPO_VOICE_IDLE));
+    memcpy(previous,p,sizeof(previous));
+    assert(yunbao_screen_render_companion(p,240,240,GADGET_STATUS_OFFLINE,1000,false,true,false,IMPO_VOICE_IDLE,&companion));
+    assert(!memcmp(previous,p,sizeof(previous)));guards();
     for (int st = GADGET_STATUS_BOOTING; st <= GADGET_STATUS_UPDATING; st++)
         for (unsigned t = 0; t < sizeof(times)/sizeof(times[0]); t++) {
             assert(yunbao_screen_render(p, 240, 240, (gadget_status_t)st, times[t], false, true, false)); guards();

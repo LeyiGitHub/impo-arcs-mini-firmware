@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "metric": "observed matched first-sentence scheduling opportunity, not measured playback gain",
+  "installed_image": {
+    "image_sha256": "f5634abedfb2b1904c0c1e9cad0180bcad113246c8db0e930622c23b865d1638",
+    "image_bytes": 1874136,
+    "product": "arcs-mini2-playback",
+    "listenai_sdk_version": "0.1.8",
+    "wake_bundle": "xiaozhou-single-mic"
+  },
+  "stimulus_sha256": "d3e6f39d4bd76b59f1c5e3fcb0828829302208203421d60dc539618d0ff9cbcb",
+  "summary": {
+    "attempted": 1,
+    "complete_successful_probes": 1,
+    "positive_opportunity_trials": 1,
+    "opportunity_median_ms": 497
+  },
+  "trials": [
+    {
+      "index": 1,
+      "cycle": 1,
+      "mode": "batch",
+      "endpoint_ms": 1200,
+      "ok": true,
+      "voice_ok": true,
+      "failed": 0,
+      "bench_error": false,
+      "probe_complete": true,
+      "starts": 1,
+      "appends": 2,
+      "dones": 1,
+      "fulls": 0,
+      "other_deltas": 0,
+      "first_append_after_ack_ms": 6650,
+      "first_sentence_after_ack_ms": 6650,
+      "final_after_ack_ms": 7147,
+      "append_bytes": 183,
+      "sentence_bytes": 54,
+      "prefix_matches": 1,
+      "equals_final": 1,
+      "errors": 0,
+      "observed_sentence_lead_ms": 497,
+      "potential_early_submission_ms": 497
+    }
+  ]
+}

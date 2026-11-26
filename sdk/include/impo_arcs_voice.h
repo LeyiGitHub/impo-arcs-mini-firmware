@@ -2,6 +2,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include "impo_arcs_reply_probe.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,12 +38,24 @@ typedef struct {
     uint32_t missing_parent, text_not_ready, duplicate_replies;
     uint32_t rejected_parent, rejected_state;
     bool subscription_ready;
+    impo_arcs_reply_probe_snapshot_t reply_probe;
+    bool reply_incremental;
+    uint32_t reply_segments, reply_mismatches;
+    uint32_t captured_pcm_bytes, trimmed_pcm_bytes, tail_keep_ms;
 } impo_arcs_voice_snapshot_t;
 
 /* Task context. Configuration is accepted only between turns. No automatic
  * retry or batch fallback after any part of an overlap request is submitted. */
 int impo_arcs_mini_configure_voice(const impo_arcs_voice_config_t *config);
 void impo_arcs_mini_voice_snapshot(impo_arcs_voice_snapshot_t *out);
+/* Experimental append-only reply playback. Only between conversations. The
+ * gateway's live deltas must represent the stable user-visible answer. Default
+ * false; on a final-prefix mismatch the current utterance fails explicitly. */
+int impo_arcs_mini_configure_reply(bool incremental);
+/* Experimental batch-only trailing-silence trimming. 0 disables (default),
+ * 200..1000 preserves that many ms after the last VAD voice frame. Does not
+ * shorten the endpoint. Refused during a session or with overlap enabled. */
+int impo_arcs_mini_configure_voice_tail(uint32_t keep_ms);
 
 #ifdef __cplusplus
 }

@@ -13,6 +13,7 @@
 #include "yunbao_wake.h"
 #include "gadget_voice.h"
 #include "impo_arcs_mini.h"
+#include "yunbao_camera.h"
 #include "impo_product_config.h"
 
 static lisa_device_t *s_amp, *s_gpio;
@@ -45,9 +46,18 @@ static void show_status(gadget_status_t status)
 }
 static unsigned poll_buttons(void)
 {
-    return yunbao_button_poll(&s_button,
+    unsigned edges = yunbao_button_poll(&s_button,
         lisa_gpio_read_pin(s_gpio, POWER_KEY_PIN) == LISA_GPIO_LOW,
         (uint32_t)plat_uptime_ms());
+    const impo_arcs_mini_application_t *app=impo_arcs_mini_application();
+    if ((edges & GADGET_BTN_AUX_PRESS) && app && app->on_button && app->on_button())
+        edges &= ~(GADGET_BTN_AUX_PRESS | GADGET_BTN_AUX_RELEASE);
+    return edges;
+}
+static void poll_status(void)
+{
+    const impo_arcs_mini_application_t *app=impo_arcs_mini_application();
+    if(app && app->on_tick)app->on_tick();
 }
 static int read_power(gadget_power_t *out)
 {
@@ -68,6 +78,9 @@ static gadget_board_t s_board = {
     .power_off = power_off,
     .show_status = show_status,
     .show_animation = yunbao_display_restore,
+    .poll_status = poll_status,
+    .features = "screen",
+    .camera_capture = yunbao_camera_capture,
     .instructions = IMPO_INSTRUCTIONS,
 };
 const gadget_board_t *gadget_board_get(void)

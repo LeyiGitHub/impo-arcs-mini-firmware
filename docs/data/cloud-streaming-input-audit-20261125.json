@@ -1,0 +1,277 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-11-25",
+  "scope": "Official public SDK, public client contracts, deployed public gateway description, and existing device measurements",
+  "conclusion": {
+    "current_device_input": "WAV Base64 file item on POST /chat/stream; optional capture/upload overlap",
+    "verified_realtime_asr_contract": null,
+    "integration_status": "No verified callable streaming ASR contract found in audited official sources",
+    "production_backend_internals": "Unknown; implementation and deployment revision not accessible",
+    "negative_search_is_global_proof": false
+  },
+  "verified_repositories": {
+    "impoai/impo": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+    "impoai/impo-gadget-sdk": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b"
+  },
+  "deployed_public_resources": [
+    {
+      "url": "https://gadgets.impo.ai/",
+      "status": 200,
+      "sha256": "26f4d6ba79453c0204dd533abbb293b82815d367afb0a416a221f1d5f7cbbec7",
+      "observation": "Declares reply streaming and speech; does not specify realtime ASR"
+    },
+    {
+      "url": "https://impo.ai/docs/gadgets/overview/",
+      "status": 200,
+      "sha256": "b13b3eae959996bf16cd7138756bf922aed93e9c58bcdb11e56f7372fd43b897",
+      "observation": "General hardware/conversation guide, not a streaming ASR contract"
+    },
+    {
+      "url": "https://github.com/impoai/impo/blob/main/server/gadget-gateway/README.md",
+      "status": 404,
+      "observation": "Reference linked by gateway landing page is unavailable; this is not a runtime ASR route probe"
+    }
+  ],
+  "existing_device_measurements": {
+    "source": "reply-stream-20261125-coalesced-validation.json",
+    "installed_image_at_that_validation": {
+      "image_sha256": "e54675a9442d8056c4a59ddba317fb9ec56326a17b99fdcedf540c8c2edc29cd",
+      "image_bytes": 1876904,
+      "product": "arcs-mini2-playback",
+      "listenai_sdk_version": "0.1.8",
+      "wake_bundle": "xiaozhou-single-mic"
+    },
+    "trials": 8,
+    "intervals_ms": {
+      "capture_to_queued": {
+        "samples": 8,
+        "min": 2522,
+        "max": 4085
+      },
+      "queued_to_ack": {
+        "samples": 8,
+        "min": 1244,
+        "max": 2162
+      },
+      "ack_to_first_append": {
+        "samples": 8,
+        "min": 4563,
+        "max": 5790
+      },
+      "tts_submit_to_first_body": {
+        "samples": 8,
+        "min": 2873,
+        "max": 4860
+      }
+    },
+    "asr_start_or_finish_markers_available": false,
+    "asr_overlap_gain_measured": false
+  },
+  "proposed_cloud_contract": {
+    "status": "Proposal only; no new routes were called or implemented",
+    "transport": "Existing paired Noise Link; incremental binary input and NDJSON response",
+    "suggested_routes": [
+      "GET /voice/capabilities",
+      "POST /voice/stream",
+      "GET /voice/turns/{turn_id}",
+      "POST /voice/turns/{turn_id}/cancel"
+    ],
+    "required_events": [
+      "voice.started",
+      "audio.accepted",
+      "asr.partial",
+      "asr.segment_final",
+      "asr.final",
+      "turn.accepted",
+      "voice.error"
+    ],
+    "pcm_format": {
+      "encoding": "pcm_s16le",
+      "sample_rate_hz": 16000,
+      "channels": 1
+    },
+    "message_creation": "Only after explicit valid commit and complete final transcript, once per turn_id",
+    "proof": "Receive content-bearing recognition before commit, then send unique suffix and verify one complete final turn; verify a continuous recognizer session"
+  },
+  "changes_in_this_audit": {
+    "documentation": true,
+    "sdk_runtime": false,
+    "firmware_flash": false,
+    "device_configuration": false,
+    "new_authenticated_cloud_voice_probe": false,
+    "new_end_to_end_speedup_claim": false
+  },
+  "source_files": [
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "android/app/src/main/java/ai/impo/nativebridge/VoiceInputController.kt",
+      "git_blob_sha1": "096416b1454101d78aa478199b74a506c9877c8d",
+      "sha256": "f13eed1160b98912005c898fff4a1d003382959c05841405d5930fd0195a7265",
+      "bytes": 8725,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/android/app/src/main/java/ai/impo/nativebridge/VoiceInputController.kt"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "android/client/src/main/kotlin/ai/impo/client/ImpoClient.kt",
+      "git_blob_sha1": "6165a2e0cad686249fc751117aac3281fe023bce",
+      "sha256": "f2aa4d8d6f950fb030050a461856da2c56aa07cbb13b75c835290bcb3ee2b8cb",
+      "bytes": 35897,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/android/client/src/main/kotlin/ai/impo/client/ImpoClient.kt"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "contracts/capabilities.md",
+      "git_blob_sha1": "20b01bf390d9223accf355d237c5991e3477c242",
+      "sha256": "5a46c0c290cec83d959e202b895c971a4bef24f8a3b660d64c1805b39659ce65",
+      "bytes": 7731,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/contracts/capabilities.md"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "contracts/client-protocol.md",
+      "git_blob_sha1": "d4bd7bdf5dde72c2f58c12824c885f2519275eca",
+      "sha256": "431e8e5ffaace40b6223e85250c70cfa9f8c1f806a0465373500b26cda302da0",
+      "bytes": 43658,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/contracts/client-protocol.md"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "contracts/developers.md",
+      "git_blob_sha1": "c041a6f659dad254e4a682c449950a0f380749e4",
+      "sha256": "e252cbdf67063a520ff0f1d8c12f4b5b591ddb61d52603bca02107c6235370cf",
+      "bytes": 6816,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/contracts/developers.md"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "ios/App/Sources/VoiceDictation.swift",
+      "git_blob_sha1": "c44531113b073060d1563ddfd3ae5ed08022ff8d",
+      "sha256": "821b05b9e34e5171dee20c19b1e47a1073b779d9196d709c72d4c056a3d3d66a",
+      "bytes": 7881,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/ios/App/Sources/VoiceDictation.swift"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "ios/Packages/InstantClient/Sources/InstantClient/InstantClient.swift",
+      "git_blob_sha1": "3a0f3d53494520fafde29bbb167218175b1b9376",
+      "sha256": "22a68cc38d184cd62403950644cb9472900036716b22bac1e39ad91ab8c08439",
+      "bytes": 43910,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/ios/Packages/InstantClient/Sources/InstantClient/InstantClient.swift"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "web/developers/src/Docs.tsx",
+      "git_blob_sha1": "75c1b8e0481051ea15f7a4e37369938bc6c404c1",
+      "sha256": "4a30e7fe53b6b772c41a9d42983c40f85fd951805a8346f48fa67a5df6e5c558",
+      "bytes": 16690,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/web/developers/src/Docs.tsx"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "web/src/VoiceInput.tsx",
+      "git_blob_sha1": "18d0876226d166a21f596827646e6e803c68599f",
+      "sha256": "bd1443a964bd76e13c19e1f329e8d271c4b676b69208a05a2439e7cde4a8e2e9",
+      "bytes": 7196,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/web/src/VoiceInput.tsx"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "web/src/api/client.ts",
+      "git_blob_sha1": "d1ab9bcf7b691302da9c5a8c1a6fb5022bd975ab",
+      "sha256": "865b84c7bc642fe4bdd4ed97c8e5aaa35246155b6ea88da53f1d30851e7abd41",
+      "bytes": 4075,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/web/src/api/client.ts"
+    },
+    {
+      "repository": "impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "path": "web/src/voice-input.ts",
+      "git_blob_sha1": "764180a305165004db9f7fcdd72830203f09a29d",
+      "sha256": "bee2abcbca08a608d80ce9ef18fb7e6a44acf1cdce8ef2adb723bd0a371c9fcc",
+      "bytes": 8472,
+      "url": "https://github.com/impoai/impo/blob/45cc0886917d8d864c957545ea4bbb7c5b89fa83/web/src/voice-input.ts"
+    },
+    {
+      "repository": "impoai/impo-gadget-sdk",
+      "commit": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b",
+      "path": "arcs/gadget/gadget_voice.c",
+      "git_blob_sha1": "287ca766556b702e7194e641c6b894a99243f27d",
+      "sha256": "9189cdb310a36858a046a9dbe5ac3c97728fb1eba05aa033946191f7408b6a13",
+      "bytes": 14476,
+      "url": "https://github.com/impoai/impo-gadget-sdk/blob/cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b/arcs/gadget/gadget_voice.c"
+    },
+    {
+      "repository": "impoai/impo-gadget-sdk",
+      "commit": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b",
+      "path": "arcs/gadget/gadget_voice_logic.c",
+      "git_blob_sha1": "0b48323e77c80fa692484a1759c2e6d820b5e3e4",
+      "sha256": "2b2e1f04b60e6016b9e089ef16f55f2e76e8293df6eaf5adfc65c9a311b1272c",
+      "bytes": 6081,
+      "url": "https://github.com/impoai/impo-gadget-sdk/blob/cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b/arcs/gadget/gadget_voice_logic.c"
+    },
+    {
+      "repository": "impoai/impo-gadget-sdk",
+      "commit": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b",
+      "path": "esp32/components/impo/impo_chat_link.c",
+      "git_blob_sha1": "4f9b49f91e3b3228da4c53a664a72505b22482fb",
+      "sha256": "5ee23c2f08755bb62e8cdcb68b250e8c4ef5b24b7fa5f003b906c713701f45e1",
+      "bytes": 31729,
+      "url": "https://github.com/impoai/impo-gadget-sdk/blob/cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b/esp32/components/impo/impo_chat_link.c"
+    },
+    {
+      "repository": "impoai/impo-gadget-sdk",
+      "commit": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b",
+      "path": "esp32/components/impo/impo_voice.c",
+      "git_blob_sha1": "ebf0d42e25ba75960861afd99395fef820925bf9",
+      "sha256": "3dcffbdc1c6a85044bf727512414dd846c72b3b0ae8a757bc16c69afbf9935bd",
+      "bytes": 32088,
+      "url": "https://github.com/impoai/impo-gadget-sdk/blob/cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b/esp32/components/impo/impo_voice.c"
+    },
+    {
+      "repository": "impoai/impo-gadget-sdk",
+      "commit": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b",
+      "path": "esp32/main/noise_control.cpp",
+      "git_blob_sha1": "d33471a5a88a60e921d4f1f5b5b6f8665df20b30",
+      "sha256": "23fba5d88ca296689c153f5d98a8033f687b1202757b5cfeb8e8041bf92fb2fb",
+      "bytes": 106642,
+      "url": "https://github.com/impoai/impo-gadget-sdk/blob/cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b/esp32/main/noise_control.cpp"
+    },
+    {
+      "repository": "impoai/impo-gadget-sdk",
+      "commit": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b",
+      "path": "linux/src/impogadget/impo_api.py",
+      "git_blob_sha1": "d24994214af0808095ca928937368a8fd35a3205",
+      "sha256": "b807dcfc57a32005b2a27a6df666e3c55d243b6d694f4b96ae05c4b01ba446df",
+      "bytes": 6151,
+      "url": "https://github.com/impoai/impo-gadget-sdk/blob/cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b/linux/src/impogadget/impo_api.py"
+    },
+    {
+      "repository": "impoai/impo-gadget-sdk",
+      "commit": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b",
+      "path": "linux/src/impogadget/link_client.py",
+      "git_blob_sha1": "73e64acfe1ed9e2adfd96d55c56efca98858a33d",
+      "sha256": "0ea36512294aaf187a36c61d0f9695e0af064f75706c91b0be86354639704847",
+      "bytes": 15619,
+      "url": "https://github.com/impoai/impo-gadget-sdk/blob/cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b/linux/src/impogadget/link_client.py"
+    },
+    {
+      "repository": "impoai/impo-gadget-sdk",
+      "commit": "cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b",
+      "path": "linux/src/impogadget/noise/envelope.py",
+      "git_blob_sha1": "0eb1a8c0249878c34dbfc4399a7d4d9fc32e101f",
+      "sha256": "fbc8ff41059e2dc2c53fdc4aa42087b12d0e6202d2cb3f27a08603b5c76228ba",
+      "bytes": 15856,
+      "url": "https://github.com/impoai/impo-gadget-sdk/blob/cf20c6bc87b6514e3ba97f4a04c00bed86fbc47b/linux/src/impogadget/noise/envelope.py"
+    }
+  ]
+}

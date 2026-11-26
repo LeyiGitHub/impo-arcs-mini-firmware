@@ -3,10 +3,24 @@ import sys
 from pathlib import Path
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
-from voice_latency_bench import pending_trials,parse_snapshot,parse_reply_diagnostics
+from voice_latency_bench import pending_trials,parse_snapshot,parse_reply_diagnostics,matched_capture_stage,parse_tail_diagnostics
 
 
 class ScheduleTests(unittest.TestCase):
+    def test_tail_metrics_keep_the_completed_turn(self):
+        text='voice_tail epoch=7 keep_ms=300 captured=76800 trimmed=28800\nvoice_tail epoch=8 keep_ms=0 captured=0 trimmed=0'
+        self.assertEqual(parse_tail_diagnostics(text,7),dict(tail_keep_ms=300,captured_pcm_bytes=76800,trimmed_pcm_bytes=28800))
+        self.assertEqual(parse_tail_diagnostics(text,9),{})
+
+    def test_capture_snapshot_is_bound_to_boot_epoch_and_capture(self):
+        turn={'boot':'a','epoch':7,'capture':4200}
+        snapshot={'boot':'a','epoch':7,'capture':4200,'valid':'7f','stages':{'0':3000}}
+        self.assertEqual(matched_capture_stage(snapshot,turn),3000)
+        for key,value in [('boot','b'),('epoch',8),('capture',5200),('valid','7e')]:
+            changed=dict(snapshot);changed[key]=value
+            self.assertIsNone(matched_capture_stage(changed,turn))
+        self.assertIsNone(matched_capture_stage(None,turn))
+
     def test_diagnostics_do_not_mix_the_continuous_next_turn(self):
         text = """voice_sub_turn epoch=7 ready=1 bytes=2048 lines=8 complete=1
 voice_filter_turn epoch=7 missing=1 not_ready=0 duplicate=1 parent=0 state=0

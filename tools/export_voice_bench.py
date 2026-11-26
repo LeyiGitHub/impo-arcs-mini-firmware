@@ -15,6 +15,7 @@ def export(directory):
         trial = {k: row[k] for k in
                  ("index", "cycle", "mode", "endpoint_ms", "ok", "voice_ok",
                   "failed", "pcm", "queued", "backlog", "dropped",
+                  "tail_keep_ms", "captured_pcm_bytes", "trimmed_pcm_bytes",
                   "chat_requests", "tts_requests", "audio_timing_generation_matches")
                  if k in row}
         trial["bench_error"] = bool(row.get("error") or row.get("record_error"))

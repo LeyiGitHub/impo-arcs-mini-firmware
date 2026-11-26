@@ -89,6 +89,23 @@ def parse_reply_diagnostics(text, epoch):
     return row
 
 
+def parse_tail_diagnostics(text, epoch):
+    for match in re.finditer(r"voice_tail epoch=(\d+) keep_ms=(\d+) captured=(\d+) trimmed=(\d+)",text):
+        if int(match[1]) == epoch:
+            return dict(zip(["tail_keep_ms","captured_pcm_bytes","trimmed_pcm_bytes"],map(int,match.groups()[1:])))
+    return {}
+
+
+def matched_capture_stage(snapshot, turn):
+    """Bind the early snapshot to this exact turn, never a continuous followup."""
+    if (snapshot and snapshot['boot'] == turn.get('boot') and
+            snapshot['epoch'] == turn.get('epoch') and
+            snapshot.get('capture') == turn.get('capture') and
+            int(snapshot['valid'], 16) & 1 and '0' in snapshot['stages']):
+        return snapshot['stages']['0']
+    return None
+
+
 class Shell:
     def __init__(self, adb, serial):
         self.proc = subprocess.Popen([adb, "-s", serial, "shell"], stdin=subprocess.PIPE,
@@ -137,6 +154,14 @@ def run_trial(sh, args, index, mode, pause):
         raise RuntimeError("Mac output changed; stopping to preserve user setting")
     if "state=online" not in sh.command("link"):
         raise RuntimeError("Device is not online; no question sent")
+    reply_mode=getattr(args,"reply_mode",None)
+    if reply_mode:
+        configured_reply=sh.command("reply_stream "+reply_mode)
+        if "reply_stream mode="+reply_mode not in configured_reply:
+            raise RuntimeError("Reply mode configuration refused; no question sent")
+        configured_playback=sh.command("playback adaptive 1200 full apply")
+        if "adaptive=1 sentence=0" not in configured_playback or "busy" in configured_playback:
+            raise RuntimeError("Playback configuration refused; no question sent")
     configured = sh.command(f"voice_latency {mode} {pause}")
     if f"voice configured mode={mode}" not in configured:
         raise RuntimeError("Voice configuration refused; no question sent")
@@ -145,6 +170,7 @@ def run_trial(sh, args, index, mode, pause):
     stem = args.output / f"trial-{index:03d}-{mode}-{pause}"
     rec = player = None
     result = {"index": index, "mode": mode, "endpoint_ms": pause, "ok": False}
+    if reply_mode:result["reply_mode"]=reply_mode
     try:
         if args.recorder:
             rec = subprocess.Popen([str(args.recorder), str(stem)+".wav"], stdin=subprocess.PIPE,
@@ -184,17 +210,39 @@ def run_trial(sh, args, index, mode, pause):
             raise RuntimeError("Question playback failed")
         result["stimulus_end_host_mono"] = time.monotonic()
         end = time.monotonic()+args.timeout
+        capture_snapshot = None
+        capture_queries = 0
         while time.monotonic() < end:
-            rows = TURN.findall(sh.clean(sh.raw[start:]))
+            observed = sh.clean(sh.raw[start:])
+            rows = TURN.findall(observed)
             if rows:
                 row = rows[0]
                 result.update({k: v if k in ("boot", "valid") else int(v) for k, v in zip(KEYS, row)})
                 result["ok"] = result["failed"] == 0 and result["dropped"] == 0 and result["valid"] == "7f"
                 break
+            # Save last-voice/capture while this turn is still active. The
+            # post-turn log burst can lose its final lines, and the live shell
+            # snapshot is reset when continuous dialogue starts listening again.
+            if reply_mode and capture_snapshot is None and capture_queries < 3 and 'listened ' in observed:
+                capture_queries += 1
+                try:
+                    candidate = parse_snapshot(sh.command('voice_latency', .4))
+                    if '0' in candidate['stages'] and 'capture' in candidate:
+                        capture_snapshot = candidate
+                except ValueError:
+                    pass
             sh.drain(.1)
         else:
             raise RuntimeError("Voice turn timed out; result unknown, no retry")
-        sh.drain(.08)  # The bounded per-turn diagnostic lines follow the summary.
+        if reply_mode:
+            # The turn row precedes the delta rows. Sending a shell query here
+            # can interleave its echo/output with those still-pending rows.
+            diagnostic_end = time.monotonic() + 2
+            marker = r"voice_capture_turn epoch=" + str(result["epoch"]) + r" last_voice=\d+"
+            while not re.search(marker, sh.clean(sh.raw[start:])) and time.monotonic() < diagnostic_end:
+                sh.drain(.05)
+        else:
+            sh.drain(.08)
         text = sh.clean(sh.raw[start:])
         result["reply_diagnostics"] = parse_reply_diagnostics(text, result["epoch"])
         result["chat_requests"] = len(re.findall(r"stream \d+: POST /chat/stream", text))
@@ -210,6 +258,19 @@ def run_trial(sh, args, index, mode, pause):
         result["answer_ended"] = "ended; last 10 blocks" in speech
         result["ok"] &= result["answer_buffer_ready"] and result["answer_ended"]
         result["voice_ok"] = result["ok"]
+        if reply_mode:
+            playback=sh.command("playback",.3)
+            counters=re.search(r"playback samples played=(\d+) queued=(\d+) underruns=(\d+) gap_ms=(\d+) prefill_ms=(\d+)",playback)
+            if counters:
+                result["playback"]={k:int(v) for k,v in zip(
+                    ["played_samples","queued_samples","underruns","underrun_ms","prefill_ms"],counters.groups())}
+                timings=re.search(r"playback timing request=(\d+) body=(\d+) pcm=(\d+) first=(\d+) last=(\d+)",playback)
+                if timings:
+                    result["playback"].update({k:int(v) for k,v in zip(
+                        ["request_ms","first_body_ms","first_pcm_ms","first_write_ms","last_write_ms"],timings.groups())})
+            else:
+                result["ok"]=result["voice_ok"]=False
+                result["error"]="Missing playback counters; trial retained"
         for stage in ["first_byte", "first_pcm"]:
             m = re.search(r"speech_timing gen=(\d+) stage="+stage+r" mono_ms=(\d+)", speech)
             if m:
@@ -236,12 +297,19 @@ def run_trial(sh, args, index, mode, pause):
                 result["capture_host_mono"] = stamp
             tail = chunk[-150:]
         snapshot = sh.command("voice_latency")
+        # The tail row follows capture in the console burst. Read the drained
+        # stream after this existing query, and bind it to the completed epoch.
+        result.update(parse_tail_diagnostics(sh.clean(sh.raw[start:]),result["epoch"]))
         result["stages"] = {int(k): int(v) for k, v in re.findall(r"voice stage=(\d+) mono_ms=(\d+)", snapshot)}
         # Bind acoustic-tail alignment to this summary, even if automatic
         # continuous capture has already replaced the shell's live snapshot.
         for epoch, last_voice in re.findall(r"voice_capture_turn epoch=(\d+) last_voice=(\d+)", text):
             if int(epoch) == result["epoch"] and int(result["valid"],16) & 1:
                 result["stages"][0] = int(last_voice)
+        early_last_voice = matched_capture_stage(capture_snapshot, result)
+        result['early_capture_snapshot_matched'] = early_last_voice is not None
+        if early_last_voice is not None:
+            result['stages'][0] = early_last_voice
     except KeyboardInterrupt:
         result["error"] = "Interrupted; partial trial retained, no retry"
         result["ok"] = False
@@ -290,6 +358,7 @@ def main():
     ap.add_argument("--volume", type=float, default=2)
     ap.add_argument("--speaker-volume", type=int, help="Temporary device volume; restore original unless changed during test")
     ap.add_argument("--mac-output-volume", type=int, help="Temporary Mac output volume; does not unmute; restore afterwards")
+    ap.add_argument("--reply-mode",choices=["full","incremental"],help="Experimental reply mode, restored to full after the run")
     ap.add_argument("--timeout", type=float, default=180)
     args = ap.parse_args()
     if args.cycles < 1 or not args.stimulus.is_file():
@@ -316,6 +385,7 @@ def main():
     manifest={"stimulus_sha256":hashlib.sha256(args.stimulus.read_bytes()).hexdigest(),
               "modes":modes,"cycles":args.cycles,"afplay_volume":args.volume,
               "acoustic_capture":bool(args.recorder)}
+    if args.reply_mode:manifest["reply_mode"]=args.reply_mode
     if args.image_metadata:
         meta=json.loads(args.image_metadata.read_text())
         manifest["installed_image"]={k:meta[k] for k in ["image_sha256","image_bytes","product","listenai_sdk_version","wake_bundle"] if k in meta}
@@ -326,7 +396,7 @@ def main():
         old=json.loads((args.output/"manifest.json").read_text())
         results=json.loads((args.output/"trials.json").read_text())
         normalized=json.loads(json.dumps(manifest))
-        for k in ["stimulus_sha256","modes","cycles","afplay_volume","acoustic_capture","installed_image"]:
+        for k in ["stimulus_sha256","modes","cycles","afplay_volume","acoustic_capture","installed_image","reply_mode"]:
             if old.get(k)!=normalized.get(k):ap.error("Resume condition changed: "+k)
         for k,v in [("speaker_volume_percent",args.speaker_volume),("mac_output_volume_percent",args.mac_output_volume)]:
             if old.get(k)!=v:ap.error("Resume condition changed: "+k)
@@ -383,6 +453,7 @@ def main():
         try:
             sh.command("talk") if "dialogue=1" in sh.command("wake") else None
             sh.idle(); sh.command("voice_latency batch 1200"); sh.command("wake on")
+            if args.reply_mode:sh.command("reply_stream full")
         finally:
             try:
                 if original_speaker is not None and speaker_volume(sh)==args.speaker_volume:

@@ -1,0 +1,262 @@
+--- a/arcs/gadget/gadget_speech.h
++++ b/arcs/gadget/gadget_speech.h
+@@ -9,6 +9,9 @@
+ void gadget_speech_snapshot(impo_arcs_playback_snapshot_t *out);
+ bool gadget_speech_started(void);
+ int gadget_speech_say(const char *text);
++int gadget_speech_stream_begin(const char *first);
++int gadget_speech_stream_append(const char *text);
++int gadget_speech_stream_finish(void);
+ void gadget_speech_cancel(void);
+ #ifdef __cplusplus
+ }
+--- a/arcs/gadget/gadget_speech.c
++++ b/arcs/gadget/gadget_speech.c
+@@ -22,6 +22,16 @@
+ static SemaphoreHandle_t s_lock;
+ static uint8_t *s_ingress, *s_chunk;
+ static char *s_pending;
++#define STREAM_QUEUE 8u
++static char *s_text_queue[STREAM_QUEUE];
++static unsigned s_text_head,s_text_count;
++static size_t s_text_bytes;
++static bool s_stream_mode,s_stream_finished;
++static uint64_t s_text_progress;
++static void clear_text_locked(void) {
++    for(unsigned i=0;i<STREAM_QUEUE;i++){free(s_text_queue[i]);s_text_queue[i]=NULL;}
++    s_text_head=s_text_count=0;s_text_bytes=0;
++}
+ static uint32_t s_epoch, s_token;
+ static int s_handle=-1;
+ static bool s_active, s_net_done, s_abort;
+@@ -114,14 +124,31 @@
+             e.epoch=owned;e.gen=s_sound_gen;
+         }
+         bool active=s_active,abort=s_abort;
++        bool streaming=s_stream_mode,finished=s_stream_finished;
++        if(active && !text && s_text_count) {
++            text=s_text_queue[s_text_head];s_text_queue[s_text_head]=NULL;
++            s_text_head=(s_text_head+1)%STREAM_QUEUE;s_text_count--;s_text_bytes-=strlen(text);
++        }
++        uint64_t progress=s_text_progress;
+         impo_arcs_playback_config_t config=s_config;
+         xSemaphoreGive(s_lock);
++        if(active && abort)goto failed;
++        if(active && streaming && !text) {
++            if(finished) {
++                if(live(owned))gadget_sound_end(e.gen,NULL);
++                xSemaphoreTake(s_lock,portMAX_DELAY);
++                bool current=s_epoch==owned;unsigned segments=s_stats.segments_decoded;
++                if(current){s_active=false;s_stats.active=false;}
++                xSemaphoreGive(s_lock);
++                if(current)LISA_LOGI(TAG,"speech decoded gen=%u segments=%u",(unsigned)e.gen,segments);
++            } else if(plat_uptime_ms()-progress>45000)goto failed;
++            vTaskDelay(pdMS_TO_TICKS(5));continue;
++        }
+         if(!active||!text){vTaskDelay(pdMS_TO_TICKS(5));continue;}
+-        if(abort)goto failed;
+         if(!request) {
+             /* Leave ample PCM room before prefetching another segment. */
+             if(offset && gadget_sound_room()<GADGET_SOUND_RATE*24u){vTaskDelay(pdMS_TO_TICKS(5));continue;}
+-            size_t n=segment_len(text,offset,config.sentence_tts);
++            size_t n=segment_len(text,offset,!streaming && config.sentence_tts);
+             char save=text[offset+n];text[offset+n]=0;
+             cJSON *body=cJSON_CreateObject();if(body)cJSON_AddStringToObject(body,"text",text+offset);
+             char *json=body?cJSON_PrintUnformatted(body):NULL;cJSON_Delete(body);text[offset+n]=save;
+@@ -164,6 +191,10 @@
+             xSemaphoreTake(s_lock,portMAX_DELAY);
+             if(s_epoch==owned){s_stats.segments_decoded++;s_handle=-1;}
+             xSemaphoreGive(s_lock);
++            if(!text[offset] && streaming) {
++                free(text);text=NULL;offset=0;request=false;body_logged=false;
++                continue; /* wait for append/finish, preserving this sound generation */
++            }
+             if(!text[offset]) {
+                 if(live(owned))gadget_sound_end(e.gen,NULL);
+                 xSemaphoreTake(s_lock,portMAX_DELAY);
+@@ -202,7 +233,7 @@
+     if(s_lock)xSemaphoreGive(s_lock);
+     return idle?0:-1;
+ }
+-int gadget_speech_say(const char *text) {
++static int speech_begin(const char *text,bool streaming) {
+     if(!s_lock||!text||!*text||strlen(text)>TEXT_MAX)return -1;
+     char *copy=malloc(strlen(text)+1);if(!copy)return -1;strcpy(copy,text);
+     xSemaphoreTake(s_lock,portMAX_DELAY);
+@@ -214,11 +245,33 @@
+         else if(++s_clean>=3){s_clean=0;if(s_learned_prefill>s_config.prefill_ms)s_learned_prefill-=100;}
+     }
+     if(s_learned_prefill<s_config.prefill_ms)s_learned_prefill=s_config.prefill_ms;
++    clear_text_locked();s_stream_mode=streaming;s_stream_finished=!streaming;
++    s_text_progress=plat_uptime_ms();
+     free(s_pending);s_pending=copy;s_head=s_tail=s_count=0;s_net_done=false;s_abort=false;s_error[0]=0;
+     memset(&s_stats,0,sizeof(s_stats));s_stats.active=s_active=true;s_stats.request_ms=plat_uptime_ms();
+     s_sound_gen=s_config.adaptive?gadget_sound_begin_adaptive("speech",s_learned_prefill):gadget_sound_begin_buffered("speech");
+     s_stats.generation=s_sound_gen;
+     xSemaphoreGive(s_lock);return 0;
++}
++int gadget_speech_say(const char *text) { return speech_begin(text,false); }
++int gadget_speech_stream_begin(const char *text) { return speech_begin(text,true); }
++int gadget_speech_stream_append(const char *text) {
++    if(!s_lock||!text||!*text)return -1;
++    size_t n=strlen(text);if(n>=TEXT_MAX)return -1;
++    char *copy=malloc(n+1);if(!copy)return -1;memcpy(copy,text,n+1);
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    bool ok=s_active && s_stream_mode && !s_stream_finished && !s_abort &&
++        s_text_count<STREAM_QUEUE && s_text_bytes+n<TEXT_MAX;
++    if(ok){s_text_queue[(s_text_head+s_text_count)%STREAM_QUEUE]=copy;s_text_count++;
++        s_text_bytes+=n;s_text_progress=plat_uptime_ms();}
++    xSemaphoreGive(s_lock);if(!ok)free(copy);return ok?0:-1;
++}
++int gadget_speech_stream_finish(void) {
++    if(!s_lock)return -1;
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    bool ok=s_active && s_stream_mode && !s_abort;
++    if(ok){s_stream_finished=true;s_text_progress=plat_uptime_ms();}
++    xSemaphoreGive(s_lock);return ok?0:-1;
+ }
+ void gadget_speech_cancel(void) {
+     if(!s_lock){gadget_sound_stop();return;}
+@@ -230,6 +283,7 @@
+         (state==GADGET_SOUND_PLAYING || state==GADGET_SOUND_FETCHING));
+     int old=s_handle;s_handle=-1;s_epoch++;s_token++;s_active=false;s_abort=true;s_stats.active=false;
+     s_stats.cancelled|=unfinished;s_stats.queued_samples=0;s_stats.rebuffering=false;
++    clear_text_locked();s_stream_mode=false;s_stream_finished=true;
+     free(s_pending);s_pending=NULL;s_head=s_tail=s_count=0;
+     gadget_sound_stop();xSemaphoreGive(s_lock);impo_link_stream_cancel(old);
+ }
+--- a/arcs/gadget/gadget_voice.h
++++ b/arcs/gadget/gadget_voice.h
+@@ -17,6 +17,7 @@
+ } gadget_voice_state_t;
+ 
+ int gadget_voice_start(void);
++int gadget_voice_reply_configure(bool incremental);
+ int gadget_voice_configure(const impo_arcs_voice_config_t *config);
+ void gadget_voice_snapshot(impo_arcs_voice_snapshot_t *out);
+ /* Idle: start listening. Listening: stop now. Replying: interrupt and listen again. Any task. */
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -71,6 +71,7 @@
+  * is append-only until the uploader has relinquished it. */
+ static SemaphoreHandle_t s_lock;
+ static impo_arcs_voice_config_t s_config = { false, 1200 };
++static bool s_reply_incremental;
+ static impo_arcs_voice_snapshot_t s_stats;
+ static uint8_t *s_recording;
+ static char *s_encoded, *s_ack_buf;
+@@ -186,6 +187,10 @@
+     reply.session_epoch = s_session_epoch;
+     reply.received_ms = plat_uptime_ms();
+     size_t bytes = strlen(reply.text) + 1;
++    if (accept && s_reply_incremental) {
++        /* The append consumer owns this message. Never queue its final text a second time. */
++        free(reply.text);xSemaphoreGive(s_lock);return;
++    }
+     if (accept && (bytes > LINE_MAX - s_reply_bytes || xQueueSend(s_replies, &reply, 0) != pdTRUE)) {
+         fail_locked(); /* do not silently truncate an answer on queue exhaustion */
+         accept = false;
+@@ -419,6 +424,7 @@
+     uint32_t boot_id = s_stats.boot_id;
+     memset(&s_stats, 0, sizeof(s_stats));
+     impo_arcs_reply_probe_reset();
++    s_stats.reply_incremental=s_reply_incremental;
+     s_stats.boot_id = boot_id;
+     s_stats.turn_epoch = ++s_epoch;
+     s_stats.session_epoch = s_session_epoch;
+@@ -536,6 +542,11 @@
+ }
+ 
+ /* Speaks replies in order until a quiet spell; a touch ends it early. */
++static bool incremental_failed(void)
++{
++    xSemaphoreTake(s_lock,portMAX_DELAY);fail_locked();xSemaphoreGive(s_lock);
++    gadget_speech_cancel();return false;
++}
+ static bool await_replies(void)
+ {
+     s_state = GADGET_VOICE_THINKING;
+@@ -543,6 +554,7 @@
+     bool spoke = false, completed = false;
+     char *current = NULL;      /* the reply being spoken, kept for one retry */
+     bool retried = false;
++    bool stream_open = false;
+     for (;;) {
+         if (s_touch || s_stop || s_interrupt || s_note_failed) {
+             free(current);
+@@ -550,6 +562,9 @@
+         }
+         gadget_sound_state_t st = gadget_sound_state();
+         bool busy = st == GADGET_SOUND_FETCHING || st == GADGET_SOUND_PLAYING;
++        if(s_reply_incremental && st==GADGET_SOUND_FAILED && spoke) {
++            return incremental_failed(); /* no partial answer replay */
++        }
+         /* The link dropped while fetching the speech (a router reset): say it again once it is back. */
+         if (current != NULL && st == GADGET_SOUND_FAILED && !retried && !gadget_speech_started() && impo_link_state() == IMPO_LINK_ONLINE) {
+             LISA_LOGW(TAG, "speech failed (%s); saying the reply again", gadget_sound_error());
+@@ -557,13 +572,40 @@
+             gadget_speech_say(current);
+             busy = true;
+         }
++        if(s_reply_incremental) {
++            char *segment=NULL;bool last=false;int take=0;
++            xSemaphoreTake(s_lock,portMAX_DELAY);
++            if(s_active && s_acked && (stream_open || !busy)) {
++                impo_arcs_reply_probe_refresh(s_ack.message_id,s_ack.reply_to_message_id,&s_stats.reply_probe);
++                take=impo_arcs_reply_probe_take(s_ack.message_id,s_ack.reply_to_message_id,&segment,&last);
++                if(take<0){s_stats.reply_mismatches++;fail_locked();}
++                if(s_stats.reply_probe.final_ms && !(s_stats.valid_stages&(1u<<IMPO_VOICE_MESSAGE_DONE))) {
++                    s_stats.stage_ms[IMPO_VOICE_MESSAGE_DONE]=s_stats.reply_probe.final_ms;
++                    s_stats.valid_stages|=1u<<IMPO_VOICE_MESSAGE_DONE;
++                }
++                if(segment){mark_locked(IMPO_VOICE_TTS_REQUEST);s_stats.reply_segments++;}
++            }
++            xSemaphoreGive(s_lock);
++            if(take<0)return incremental_failed();
++            if(segment) {
++                int rc=stream_open?gadget_speech_stream_append(segment):gadget_speech_stream_begin(segment);
++                free(segment);
++                if(rc)return incremental_failed();
++                if(!stream_open){s_replies_spoken++;spoke=true;s_state=GADGET_VOICE_SPEAKING;}
++                stream_open=true;busy=true;
++            }
++            if(last && stream_open) {
++                if(gadget_speech_stream_finish())return incremental_failed();
++                stream_open=false;busy=true;
++            }
++        }
+         char *text = NULL;
+         reply_t reply;
+         xSemaphoreTake(s_lock, portMAX_DELAY);
+         bool acked = s_acked;
+         if (s_active && spoke) s_stats.phase = busy ?
+             (st == GADGET_SOUND_PLAYING ? IMPO_VOICE_PLAYING : IMPO_VOICE_PREPARING) : IMPO_VOICE_WAITING;
+-        if (acked && !busy && xQueueReceive(s_replies, &reply, 0) == pdTRUE) {
++        if (!s_reply_incremental && acked && !busy && xQueueReceive(s_replies, &reply, 0) == pdTRUE) {
+             s_reply_bytes -= strlen(reply.text) + 1;
+             if (live_locked(reply.epoch) && reply.session_epoch == s_session_epoch &&
+                 reply.parent[0] && gadget_chat_reply_is_ours(reply.parent, &s_ack)) {
+@@ -652,6 +694,8 @@
+     LISA_LOGI(TAG, "voice_filter_turn epoch=%u missing=%u not_ready=%u duplicate=%u parent=%u state=%u",
+         (unsigned)stats.turn_epoch, (unsigned)stats.missing_parent, (unsigned)stats.text_not_ready,
+         (unsigned)stats.duplicate_replies, (unsigned)stats.rejected_parent, (unsigned)stats.rejected_state);
++    LISA_LOGI(TAG,"voice_reply_mode epoch=%u incremental=%u segments=%u mismatches=%u",
++        (unsigned)stats.turn_epoch,stats.reply_incremental,(unsigned)stats.reply_segments,(unsigned)stats.reply_mismatches);
+     const impo_arcs_reply_probe_snapshot_t *p = &stats.reply_probe;
+     LISA_LOGI(TAG, "voice_delta epoch=%u start=%u append=%u done=%u full=%u other=%u",
+         (unsigned)stats.turn_epoch, (unsigned)p->starts, (unsigned)p->appends,
+@@ -775,6 +819,14 @@
+     if (s_lock) xSemaphoreGive(s_lock);
+     return busy ? -1 : 0;
+ }
++int gadget_voice_reply_configure(bool incremental)
++{
++    if(s_lock)xSemaphoreTake(s_lock,portMAX_DELAY);
++    bool busy=s_state!=GADGET_VOICE_IDLE || s_active || s_session || s_upload_running || s_upload_pending;
++    if(!busy){s_reply_incremental=incremental;s_stats.reply_incremental=incremental;}
++    if(s_lock)xSemaphoreGive(s_lock);
++    return busy?-1:0;
++}
+ void gadget_voice_snapshot(impo_arcs_voice_snapshot_t *out)
+ {
+     if (!out) return;

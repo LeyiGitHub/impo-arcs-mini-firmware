@@ -13,6 +13,7 @@ static size_t played_n;
 static bool amp_on;
 
 uint64_t plat_uptime_ms(void) { return 100; }
+int plat_random(void *p,size_t n) { memset(p,0x34,n);return 0; }
 void test_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
 int lisa_kv_get_int(const char *key, int *v) { (void)key; (void)v; return -1; }
 int lisa_kv_set_int(const char *key, int v) { (void)key; (void)v; return 0; }
@@ -85,6 +86,13 @@ int main(void)
     assert(gadget_sound_write(newer, pcm, 256, 0) == 0);
     assert(gadget_sound_state() == GADGET_SOUND_PLAYING); /* Local sounds need no download. */
 
+    played_n = 0;
+    g = gadget_sound_begin_buffered("segmented reply");
+    assert(!gadget_sound_write(g, pcm, 256, 0));
+    gadget_sound_release_buffer(g-1);output_step();assert(!played_n);
+    gadget_sound_release_buffer(g);drain_block();assert(played_n==256);
+    assert(!gadget_sound_write(g, pcm, 256, 0)); /* release did not end input */
+    gadget_sound_stop();
     played_n = 0;
     g = gadget_sound_begin_buffered("long reply");
     for (int i = 0; i < 25 * GADGET_SOUND_RATE / 256 + 1; i++)

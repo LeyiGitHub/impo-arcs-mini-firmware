@@ -1,0 +1,509 @@
+{
+  "minFirmware": "0.2.3",
+  "systemPrompt": "This is one stationary ARCS Mini voice companion. Use its current registered name; names, wake words and pairings are independent per device. Its own microphone and speaker handle conversations; local wake phrases are device-specific. Wait for the listening prompt before speaking. Reply briefly in the user's language without Markdown. It has a 240x240 screen and a main button and a built-in camera, no motors. Only use its registered commands.\n\nFor each speaker.say/play_url/beep/play_effect keep both returned boot_id and playback_id. Poll speaker.playback_status for that exact pair; idle is not completion. completed means the software output drained with a 200 ms DMA guard, not acoustic or human confirmation. Playback and timer notify_event defaults false. Enable it only for an explicitly active coordinator or game; ordinary speech and local countdowns should remain false. Never enable it for an event acknowledgement. Events are best-effort hints and may be delayed/coalesced; query status for evidence. Old boot or expired IDs mean unknown, never success.\n\nOn playback_interrupted or playback_failed cancel remaining relay sentences in the active coordinator; do not advance or replay. A device event does not itself cancel another conversation's scheduled work. Never claim story-wide cancellation unless the coordinator's pending work was actually invalidated. Do not speak acknowledgements to playback, timer or button events, and never respond with another automatic playback.\n\nTimers run locally, one at a time, for 1 second to 24 hours and are lost on reboot. At expiry the device attempts one local chime only when audio and voice are idle; otherwise it records skipped_busy. Query timer.status for the result; do not add a duplicate chime or delayed announcement. Cancel with the matching timer_id and boot_id.\n\nExpression and text overlays expire automatically. Voice and warnings have screen priority. display.status reports requested content, not panel readback. Text cards fit three 216-pixel lines (about 27 Chinese or 39 ASCII characters); unsupported glyphs and overflow are rejected.\n\nFor pictures use display.show_image with a public HTTPS JPEG/PNG URL, at most 256 KiB and 512x512 source pixels. It fits the 240x240 screen without cropping, with a black background including transparency. Accepted is only a download request: keep boot_id/image_id and poll display.status.image until the same pair is ready or failed. A changed boot means unknown, never success. Ready means decoded, not physical panel confirmation; voice/warnings may cover it. Show for 1..300 seconds from ready, default 30. Text, expression and show_animation replace/clear it; reboot loses it. No GIF/WebP or authenticated URLs. On failure report it; do not retry automatically.\n\nUse temporary button event mode only for an active answer game, then restore voice mode. In event mode a short click sends a cumulative press count and does not start voice. Mode expires automatically, defaults to voice after reboot, and long-hold power behavior remains active. The event gateway may debounce rapid events; press_count/status are authoritative, not the number of received event messages.\n\nWhen camera.capture is available, the built-in camera can take one photo on request. Open the returned JPEG before describing the view. Report capture errors honestly; do not infer absence of a camera from old conversation history.",
+  "commands": [
+    {
+      "name": "device.health",
+      "description": "How the gadget is doing: overall state, uptime, free memory, battery level and charging, the Wi-Fi network it is on, and its firmware version.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "device.set_name",
+      "description": "Rename the gadget. It reconnects under the new name and the gadget list shows it from then on.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "description": "The new name, 1 to 32 characters."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "speaker.say",
+      "description": "Say something out loud on the gadget's speaker. Returns at once; the speech starts a few seconds later. Query the returned boot_id/playback_id to confirm completion. notify_event defaults false; enable only for an active coordinator, never to acknowledge events.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "What to say, 1 to 1000 characters."
+          },
+          "notify_event": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "speaker.play_url",
+      "description": "Play a sound file from the internet on the gadget's speaker: a public https MP3 (or 16-bit WAV) of at most 1.5 MB, about a minute. Returns at once; speaker.playback_status verifies the returned boot_id/playback_id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 9,
+            "maxLength": 1024,
+            "description": "https:// link to the MP3."
+          },
+          "notify_event": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "speaker.beep",
+      "description": "Play a short beep. notify_event defaults false.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "notify_event": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "speaker.set_volume",
+      "description": "Set the speaker volume. It is kept across restarts.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "percent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "0 to 100."
+          }
+        },
+        "required": [
+          "percent"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "speaker.stop",
+      "description": "Stop current playback. With playback_id and boot_id, stop only that still-active sound; a finished receipt never stops a newer sound.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "playback_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "boot_id": {
+            "type": "string",
+            "maxLength": 16
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "speaker.status",
+      "description": "What the speaker is doing (idle, fetching, playing, failed) and its volume.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "display.show_animation",
+      "description": "Give the gadget's lights back to its own status animation (after chassis.set_light, for example).",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "camera.capture",
+      "description": "Take one photo with the built-in camera. Returns a 320x240 JPEG image for you to inspect; takes up to 30 seconds. Do not claim to see anything until the returned image is opened.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "speaker.playback_status",
+      "description": "Read one playback receipt by boot_id and playback_id, or the latest sound. Completed means output drained with a 200 ms DMA guard, not human hearing. Last eight sounds only.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "playback_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "boot_id": {
+            "type": "string",
+            "maxLength": 16
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "speaker.play_effect",
+      "description": "Play one short local synthetic effect at the current volume. Refuses during voice or other playback; never queues a late sound. notify_event defaults false.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "effect": {
+            "type": "string",
+            "enum": [
+              "correct",
+              "wrong",
+              "chime",
+              "applause",
+              "bird"
+            ]
+          },
+          "notify_event": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "effect"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "display.set_expression",
+      "description": "Temporarily show a face, then restore status. Voice, offline and warning screens have priority.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "happy",
+              "sad",
+              "surprised",
+              "sleepy",
+              "curious",
+              "wink"
+            ]
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "display.show_text",
+      "description": "Show at most three short lines using supported ASCII/GB2312 glyphs. Rejects unsupported or overflowing text. Empty text clears the card. Voice/warnings take priority.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 192
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "display.show_image",
+      "description": "Download a public HTTPS static JPEG/PNG, at most 256 KiB and 512x512 source pixels; fit centered on the 240x240 screen with black background. Async: query display.status image state, matching both boot_id and image_id. Duration starts when ready; voice/warnings take priority. show_animation clears it. No GIF/WebP, URL authentication or reboot persistence.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 511
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "display.status",
+      "description": "Read requested expression, text and countdown. This is not a physical display readback.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "timer.start",
+      "description": "Start the single local countdown (1 second to 24 hours). Continues offline, lost on reboot. At expiry rings once if idle; busy audio is skipped, never interrupted or replayed later. notify_event defaults false; local chime still works.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 96
+          },
+          "notify_event": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "seconds"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "timer.status",
+      "description": "Read the current countdown or verify its timer_id. Includes alarm submission/skipped status. Only the latest timer in this boot is retained.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "timer_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "boot_id": {
+            "type": "string",
+            "maxLength": 16
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "timer.cancel",
+      "description": "Cancel the matching countdown. Does not stop unrelated audio or replay an expired alarm.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "timer_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295
+          },
+          "boot_id": {
+            "type": "string",
+            "maxLength": 16
+          }
+        },
+        "required": [
+          "timer_id",
+          "boot_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "button.configure",
+      "description": "Temporarily use short main-button clicks as answer events instead of starting voice. Default/reboot/expiry mode is voice. Long-hold power policy stays active.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "voice",
+              "event"
+            ]
+          },
+          "duration_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "button.status",
+      "description": "Read voice/event button mode, remaining temporary duration and cumulative answer press count in this boot.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "playback_completed",
+      "description": "A sound's output drained with a 200 ms DMA guard. Verify boot_id/playback_id; not acoustic confirmation. Do not speak an acknowledgement.",
+      "data": {
+        "type": "object",
+        "properties": {
+          "boot_id": {
+            "type": "string"
+          },
+          "playback_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boot_id",
+          "playback_id"
+        ]
+      }
+    },
+    {
+      "name": "playback_interrupted",
+      "description": "A sound was stopped or replaced. Invalidate pending relay sentences in its coordinator; never treat this as completion or replay automatically.",
+      "data": {
+        "type": "object",
+        "properties": {
+          "boot_id": {
+            "type": "string"
+          },
+          "playback_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boot_id",
+          "playback_id"
+        ]
+      }
+    },
+    {
+      "name": "playback_failed",
+      "description": "A sound failed. Verify its receipt. Do not repeat playback automatically.",
+      "data": {
+        "type": "object",
+        "properties": {
+          "boot_id": {
+            "type": "string"
+          },
+          "playback_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boot_id",
+          "playback_id"
+        ]
+      }
+    },
+    {
+      "name": "timer_fired",
+      "description": "A local countdown expired. Query timer.status for alarm outcome. The device already attempted its one local chime; do not ring or speak again.",
+      "data": {
+        "type": "object",
+        "properties": {
+          "boot_id": {
+            "type": "string"
+          },
+          "timer_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boot_id",
+          "timer_id"
+        ]
+      }
+    },
+    {
+      "name": "button_pressed",
+      "description": "A short click in temporary answer-button mode, with cumulative press_count. Process only for the active game. Do not acknowledge by speaking automatically.",
+      "data": {
+        "type": "object",
+        "properties": {
+          "boot_id": {
+            "type": "string"
+          },
+          "press_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "boot_id",
+          "press_count"
+        ]
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "三机故事接力",
+      "when": "用户要求多台语音伙伴轮流讲故事、读诗或扮演角色。",
+      "instructions": "先动态发现目标设备及实际能力，给每句保留设备、boot_id和playback_id。只在上一句的精确回执为completed后派发下一句，不能凭idle、固定间隔或事件消息数推进。收到interrupted、failed、旧启动或未知回执时，停止当前编排并取消自己尚未派发的句子；不要重播、补播或自动换设备。跨会话的其他调度不受本设备事件直接控制，未确认取消前不能声称全局停止。表情可以配合角色，但不承诺同步起播或无缝交接。"
+    },
+    {
+      "name": "文字卡片与按键答题",
+      "when": "用户要求猜谜、学习问答、按键抢答或看单词。",
+      "instructions": "在用户指定的设备显示能容纳的短题目；字库或长度拒绝时缩短题目，不能声称已显示。结束当前语音会话后才启用临时button event模式，设置足够短的有效期并说明此时短按用于答题。只在本次游戏中解释press_count的增量；事件可能合并，不能按收到几条消息判断按了几次。答对/答错可按用户意图播放一次对应短音效。结束、取消或超时后恢复voice模式并清理自己的文字与表情。"
+    },
+    {
+      "name": "刷牙与学习倒计时",
+      "when": "用户要刷牙计时、学习休息或一段本地倒计时。",
+      "instructions": "用timer.start并保存timer_id、boot_id，说明只有一个本地倒计时、断网继续、重启丢失。已有计时时先询问用户是否替换，不自动取消。到点设备会尝试一次提示音；若音频忙则跳过，查询timer.status核对，不额外播报或延迟补响。取消时仅取消匹配的计时编号与启动编号。"
+    },
+    {
+      "name": "表情与短提醒",
+      "when": "用户要设备做表情、显示一句短提醒或为故事配表情。",
+      "instructions": "用display.set_expression选择已有表情并设置短有效期；用display.show_text显示三行以内的文字卡片。按需查询display.status，明确它是请求状态而非真实面板读回。语音状态、断网和警告优先显示；不通过伪造SDK状态来换表情。结束可用display.show_animation恢复默认画面。 如果设备注册了display.show_image，也可使用公开HTTPS的JPEG/PNG图片（256 KiB及512x512以内）；保存boot_id和image_id并查询display.status.image，accepted不是显示成功，ready也不代表面板已物理确认。失败不自动重试。"
+    },
+    {
+      "name": "猜声音与鼓励音效",
+      "when": "用户请求一声鸟鸣、掌声、答题反馈或猜声音游戏。",
+      "instructions": "用speaker.play_effect选择bird、applause、correct、wrong或chime，保持用户现有音量。音效是本地合成短声音，不冒充真实动物录音、完整歌曲或多设备同步合奏。忙碌拒绝后不自动重试；查询本次boot_id/playback_id确认软件播放结果。"
+    }
+  ]
+}

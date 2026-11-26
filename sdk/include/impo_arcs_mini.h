@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#define IMPO_ARCS_MINI_SDK_VERSION "0.1.0"
+#define IMPO_ARCS_MINI_SDK_VERSION "0.2.3"
 
 typedef struct {
     const char *id, *display_name, *model_id, *product_id, *instructions;
@@ -29,6 +29,10 @@ typedef struct {
     int event_count;
     int (*on_init)(void);
     void (*on_status)(gadget_status_t status);
+    /* Called every 100 ms on the status task; must not block. */
+    void (*on_tick)(void);
+    /* A debounced short click. Return true to consume the voice trigger. */
+    bool (*on_button)(void);
 } impo_arcs_mini_application_t;
 
 /* An optional application component supplies this function. The SDK provides

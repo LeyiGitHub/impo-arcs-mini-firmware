@@ -1,0 +1,42 @@
+--- a/arcs/gadget/gadget_shell.c
++++ b/arcs/gadget/gadget_shell.c
+@@ -23,6 +23,7 @@
+     char params[400];
+ } job_t;
+ 
++static bool s_compact_output;
+ static void run_task(void *arg)
+ {
+     job_t *j = arg;
+@@ -30,8 +31,11 @@
+     cJSON *r = gadget_run_command(j->name, params);
+     cJSON_Delete(params);
+     char *s = cJSON_PrintUnformatted(r);
++    if(s_compact_output) {
++        LISA_LOGI(TAG,"%s: diagnostic compact output, ok=%d bytes=%u",j->name,
++            cJSON_IsTrue(cJSON_GetObjectItem(r,"ok")),s?(unsigned)strlen(s):0);
++    } else LISA_LOGI(TAG, "%s: %s", j->name, s ? s : "?");
+     cJSON_Delete(r);
+-    LISA_LOGI(TAG, "%s: %s", j->name, s ? s : "?");
+     cJSON_free(s);
+     free(j);
+     vTaskDelete(NULL);
+@@ -60,6 +64,18 @@
+ }
+ SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0) | SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN) | SHELL_CMD_DISABLE_RETURN,
+                  gadget, gadget_cmd, gadget <command> [json params]);
++
++/* Console-only diagnosis. Never changes the cloud command or its result. */
++static int gadget_output_cmd(int argc,char **argv)
++{
++    if(argc!=2 || (strcmp(argv[1],"compact") && strcmp(argv[1],"full")))return -1;
++    s_compact_output=!strcmp(argv[1],"compact");
++    shellPrint(shellGetCurrent(),"gadget console output=%s\n",s_compact_output?"compact":"full");
++    return 0;
++}
++SHELL_EXPORT_CMD(SHELL_CMD_PERMISSION(0) | SHELL_CMD_TYPE(SHELL_TYPE_CMD_MAIN) | SHELL_CMD_DISABLE_RETURN,
++                 gadget_output,gadget_output_cmd,debug: gadget console JSON output compact or full);
++
+ 
+ static int link_drop_cmd(int argc, char **argv)
+ {

@@ -5,6 +5,11 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 TEXT = "".join(chr(i) for i in range(32,127)) + "云宝IMPO启动中等待配对连接待机我在听思考正在回答网络断开电量低充更新短按说话你好结束小聆飞周上传回复准备语音取消失败缓冲"
+# GB2312 is a bounded common-Chinese repertoire, not an arbitrary Unicode claim.
+for _lead in range(0xa1,0xf8):
+    for _trail in range(0xa1,0xff):
+        try: TEXT += bytes([_lead,_trail]).decode("gb2312")
+        except UnicodeDecodeError: pass
 SHA256 = "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da"
 def generate(source, text=TEXT):
     assert hashlib.sha256(source.read_bytes()).hexdigest() == SHA256, "Unexpected Noto Sans SC source"

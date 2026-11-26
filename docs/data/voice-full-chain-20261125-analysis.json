@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-25",
+  "analysis_type": "existing local evidence; no new device requests or cloud logs",
+  "installed_image": {
+    "image_sha256": "90d0638523d57355c7530e3cb9893c3e19593f49425a20dc2f6d875d0e8d876c",
+    "image_bytes": 1871432,
+    "product": "arcs-mini2-playback",
+    "listenai_sdk_version": "0.1.8",
+    "wake_bundle": "xiaozhou-single-mic"
+  },
+  "source_datasets": [
+    "voice-latency-20261125-playback-recovery-2.json",
+    "playback-20261125-release-matched-20.json",
+    "voice-latency-20261125-playback-timeout-1.json"
+  ],
+  "conditions": {
+    "upload": "batch",
+    "endpoint_ms": 1200,
+    "playback": "adaptive",
+    "playback_initial_content_prefill_ms": 1200,
+    "sentence_tts": false,
+    "successful_full_chain_trials": 2,
+    "statistical_limit": "two recovered-network successful turns only; not a latency distribution or matched before-after experiment"
+  },
+  "clock_rules": {
+    "device_intervals": "device monotonic clock only",
+    "acoustic_interval": "recording source tail to detected answer energy",
+    "acoustic_minus_device_interval": "interval cross-check only; combines VAD tail alignment, output/leading silence/acoustic threshold and observation effects; not measured DAC latency"
+  },
+  "trials": [
+    {
+      "index": 1,
+      "components_ms": {
+        "endpoint": 1195,
+        "capture_to_upload_start": 54,
+        "upload_start_to_queued": 2075,
+        "queued_to_ack": 1194,
+        "ack_to_complete_text": 5095,
+        "complete_text_to_tts_submit": 22,
+        "tts_submit_to_first_body": 3117,
+        "first_body_to_first_pcm": 1,
+        "first_pcm_to_driver_accept": 436
+      },
+      "device_last_voice_to_driver_ms": 13189,
+      "source_end_to_detected_answer_ms": 13710,
+      "acoustic_minus_device_interval_ms": 521,
+      "vad_last_voice_relative_to_stimulus_end_ms": -6,
+      "captured_pcm_bytes": 167680,
+      "wav_bytes_locally_queued": 167724,
+      "wav_backlog_at_capture_end_bytes": 167724,
+      "dropped_capture_bytes": 0,
+      "chat_requests": 1,
+      "tts_requests": 1
+    },
+    {
+      "index": 2,
+      "components_ms": {
+        "endpoint": 1219,
+        "capture_to_upload_start": 61,
+        "upload_start_to_queued": 4671,
+        "queued_to_ack": 1518,
+        "ack_to_complete_text": 4707,
+        "complete_text_to_tts_submit": 86,
+        "tts_submit_to_first_body": 4220,
+        "first_body_to_first_pcm": 5,
+        "first_pcm_to_driver_accept": 401
+      },
+      "device_last_voice_to_driver_ms": 16888,
+      "source_end_to_detected_answer_ms": 17296,
+      "acoustic_minus_device_interval_ms": 408,
+      "vad_last_voice_relative_to_stimulus_end_ms": 26,
+      "captured_pcm_bytes": 167040,
+      "wav_bytes_locally_queued": 167084,
+      "wav_backlog_at_capture_end_bytes": 167084,
+      "dropped_capture_bytes": 0,
+      "chat_requests": 1,
+      "tts_requests": 1
+    }
+  ],
+  "component_medians_ms": {
+    "endpoint": 1207.0,
+    "capture_to_upload_start": 57.5,
+    "upload_start_to_queued": 3373.0,
+    "queued_to_ack": 1356.0,
+    "ack_to_complete_text": 4901.0,
+    "complete_text_to_tts_submit": 54.0,
+    "tts_submit_to_first_body": 3668.5,
+    "first_body_to_first_pcm": 3.0,
+    "first_pcm_to_driver_accept": 418.5
+  },
+  "playback_only_matched_comparison": {
+    "complete": {
+      "attempts": 10,
+      "acoustic_valid": 7,
+      "tts_command_to_acoustic_p50_ms": 7959,
+      "request_to_first_body_median_ms": 3606.0,
+      "first_body_to_pcm_median_ms": 3.5,
+      "first_pcm_to_driver_median_ms": 3537.5
+    },
+    "adaptive": {
+      "attempts": 10,
+      "acoustic_valid": 8,
+      "tts_command_to_acoustic_p50_ms": 4756,
+      "request_to_first_body_median_ms": 3872.0,
+      "first_body_to_pcm_median_ms": 3.0,
+      "first_pcm_to_driver_median_ms": 487.0
+    }
+  },
+  "slow_upload_event": {
+    "trial_index": 2,
+    "tls_write_bytes": 512,
+    "tls_write_elapsed_ms": 1953,
+    "enclosing_enqueue_bytes": 8192,
+    "enclosing_enqueue_elapsed_ms": 1984,
+    "additive": false,
+    "meaning": "overlapping observations of backpressure, not independent delays"
+  },
+  "separate_failure_and_recovery": {
+    "same_image": true,
+    "different_stimulus": true,
+    "attempts": 1,
+    "audio_not_started": true,
+    "capture_dropped_bytes": 0,
+    "endpoint_ms": 1186,
+    "capture_to_locally_queued_ms": 2413,
+    "locally_queued_to_ack_ms": 4401,
+    "ack_to_complete_text_ms": 25331,
+    "complete_text_to_tts_submit_ms": 82,
+    "tts_no_progress_timeout_ms": 45000,
+    "tts_requests": 2,
+    "approximate_retry_wait_before_test_cancellation_ms": 42500,
+    "test_wait_limit_after_stimulus_ms": 120000,
+    "connection_rx_silence_before_teardown_ms": 150076,
+    "clock_and_link_recovery_after_separate_reboot_approx_ms": 236000
+  },
+  "unmeasured": [
+    "per-request first and last actual transport write",
+    "TCP RTT retransmits and Wi-Fi retry counters",
+    "first incremental text arrival",
+    "gateway ingress recognition model tools TTS provider and forwarding sub-intervals",
+    "DMA completion and calibrated acoustic latency"
+  ]
+}

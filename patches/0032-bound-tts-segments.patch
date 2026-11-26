@@ -1,0 +1,114 @@
+--- a/arcs/gadget/gadget_speech.c
++++ b/arcs/gadget/gadget_speech.c
+@@ -47,6 +47,8 @@
+ }
+ static void body_status(void *ctx,int status) {
+     xSemaphoreTake(s_lock,portMAX_DELAY);
++    if ((uint32_t)(uintptr_t)ctx==s_token && s_active && !s_stats.first_status_ms)
++        s_stats.first_status_ms=plat_uptime_ms();
+     if ((uint32_t)(uintptr_t)ctx==s_token && s_active && status!=200) {
+         s_abort=true;strcpy(s_error,"TTS status");
+     }
+@@ -97,21 +99,29 @@
+     e->samples+=(uint32_t)total;
+     return 0;
+ }
+-/* Split only after a complete final display_text. UTF-8 boundaries, decimals
+- * and abbreviations stay intact: only Chinese terminal marks, !, ? or newline.
+- * First span prefers a short sentence; later spans merge to cover TTS setup time. */
++/* Bound every immutable TTS span, including the final suffix of an incremental
++ * reply. Preserve all bytes. Prefer sentences/words, but never let missing
++ * punctuation produce an unbounded request. This is a text bound, not an
++ * audio-duration guarantee; the ingress still fails explicitly on overflow. */
++#define SEGMENT_CODEPOINTS 120u
+ static size_t segment_len(const char *text,size_t off,bool sentence) {
+-    size_t length=strlen(text+off);if(!sentence)return length;
+-    size_t min=off?180:48,max=off?600:240,last=0;
++    size_t length=strlen(text+off);
++    size_t min=off?180:48,max=off?600:240,last=0,word=0,chars=0,last_chars=0,word_chars=0;
+     for(size_t i=0;i<length;) {
+         unsigned char c=(unsigned char)text[off+i];size_t k=c<0x80?1:(c<0xe0?2:(c<0xf0?3:4));
+         if(k>length-i)return length;
+         bool stop=c=='!'||c=='?'||c=='\n'||(k==3 && (!memcmp(text+off+i,"。",3)||!memcmp(text+off+i,"！",3)||!memcmp(text+off+i,"？",3)));
+-        i+=k;
+-        if(stop){last=i;if(i>=min)return i;}
+-        if(i>=max && last)return last;
+-    }
+-    return length; /* no invented punctuation or split inside a word */
++        i+=k;chars++;
++        if(stop){last=i;last_chars=chars;if(sentence && i>=min)return i;}
++        if(c==' '||c=='\t'||c=='\n'){word=i;word_chars=chars;}
++        if(sentence && i>=max && last)return last;
++        if(chars>=SEGMENT_CODEPOINTS) {
++            if(last_chars>=SEGMENT_CODEPOINTS/2)return last;
++            if(word_chars>=SEGMENT_CODEPOINTS/2)return word;
++            return i;
++        }
++    }
++    return length;
+ }
+ static void speech_task(void *arg) {
+     (void)arg;
+@@ -148,8 +158,13 @@
+         if(!active||!text){vTaskDelay(pdMS_TO_TICKS(5));continue;}
+         if(!request) {
+             /* Leave ample PCM room before prefetching another segment. */
+-            if((offset || (streaming && requested)) && gadget_sound_room()<GADGET_SOUND_RATE*24u){vTaskDelay(pdMS_TO_TICKS(5));continue;}
+-            size_t n=segment_len(text,offset,!streaming && config.sentence_tts);
++            if((offset || (streaming && requested)) && gadget_sound_room()<GADGET_SOUND_RATE*24u){
++                /* Complete mode otherwise waits for 25 s of prefill while we
++                 * wait for 24 s of room in a 30 s ring: a segmented deadlock. */
++                gadget_sound_release_buffer(e.gen);
++                vTaskDelay(pdMS_TO_TICKS(5));continue;
++            }
++            size_t n=segment_len(text,offset,config.sentence_tts);
+             char save=text[offset+n];text[offset+n]=0;
+             cJSON *body=cJSON_CreateObject();if(body)cJSON_AddStringToObject(body,"text",text+offset);
+             char *json=body?cJSON_PrintUnformatted(body):NULL;cJSON_Delete(body);text[offset+n]=save;
+@@ -157,7 +172,8 @@
+             xSemaphoreTake(s_lock,portMAX_DELAY);
+             bool current=s_epoch==owned && s_active && !s_abort;
+             uint32_t token=++s_token;
+-            if(current){s_net_done=false;s_head=s_tail=s_count=0;s_handle=-1;s_stats.segments_requested++;}
++            if(current){s_net_done=false;s_head=s_tail=s_count=0;s_handle=-1;s_stats.segments_requested++;
++                if(!s_stats.first_submit_ms)s_stats.first_submit_ms=plat_uptime_ms();}
+             xSemaphoreGive(s_lock);
+             if(!current){cJSON_free(json);continue;}
+             e.samples=0;
+@@ -312,4 +328,3 @@
+ bool gadget_speech_started(void) {
+     impo_arcs_playback_snapshot_t snapshot;gadget_speech_snapshot(&snapshot);return snapshot.played_samples>0;
+ }
+-
+--- a/arcs/gadget/gadget_sound.c
++++ b/arcs/gadget/gadget_sound.c
+@@ -218,6 +218,17 @@
+     if (gen == s_gen && s_state == GADGET_SOUND_FETCHING) {
+         s_state = GADGET_SOUND_DECODING;
+     }
++}
++
++void gadget_sound_release_buffer(uint32_t gen)
++{
++    xSemaphoreTake(s_lock, portMAX_DELAY);
++    if (gen == s_gen && !s_adaptive && s_buffering && s_count && s_state != GADGET_SOUND_FAILED) {
++        s_prefill = s_count;
++        s_play.prefill_ms = (uint32_t)(s_count * 1000u / RATE);
++        s_buffering = false;
++    }
++    xSemaphoreGive(s_lock);
+ }
+ 
+ void gadget_sound_stop(void)
+--- a/arcs/gadget/gadget_sound.h
++++ b/arcs/gadget/gadget_sound.h
+@@ -36,6 +36,9 @@
+ uint32_t gadget_sound_begin_buffered(const char *what);
+ uint32_t gadget_sound_begin_adaptive(const char *what, uint32_t prefill_ms);
+ void gadget_sound_playback_snapshot(impo_arcs_playback_snapshot_t *out);
++/* A segmented producer needs room for its next request. Release the initial
++ * prefill without ending this generation or marking its input complete. */
++void gadget_sound_release_buffer(uint32_t gen);
+ /* Queues 16 kHz mono samples, waiting up to timeout_ms for room. 0 ok, -1 replaced or stopped, -2 timeout. */
+ int gadget_sound_write(uint32_t gen, const int16_t *pcm, size_t samples, uint32_t timeout_ms);
+ /* No more samples for this sound; error (or NULL) says why it ended early. */

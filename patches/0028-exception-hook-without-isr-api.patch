@@ -1,0 +1,15 @@
+--- a/arcs/platform/arcs/crash_log.c
++++ b/arcs/platform/arcs/crash_log.c
+@@ -113,7 +113,11 @@
+     s_rec.mepc = (uint32_t)__RV_CSR_READ(CSR_MEPC);
+     s_rec.mtval = (uint32_t)__RV_CSR_READ(CSR_MTVAL);
+     s_rec.mdcause = (uint32_t)__RV_CSR_READ(CSR_MDCAUSE);
+-    s_rec.uptime_ms = (uint32_t)(xTaskGetTickCountFromISR() * portTICK_PERIOD_MS);
++    /* A synchronous exception is not an ISR. The 0.1.8 port validates the
++     * interrupt bit in FromISR APIs and asserts here, hiding the original
++     * fault behind a nested exception. Leave time unknown; use the preceding
++     * UART timestamps instead. Task handle/name below are plain TCB reads. */
++    s_rec.uptime_ms = 0;
+     TaskHandle_t cur = xTaskGetCurrentTaskHandle();
+     const char *name = cur ? pcTaskGetName(cur) : "?";
+     strncpy(s_rec.task, name ? name : "?", sizeof(s_rec.task) - 1);

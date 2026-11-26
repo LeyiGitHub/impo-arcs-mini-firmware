@@ -14,6 +14,8 @@ static int starts, speech_calls;
 static bool interrupt_result;
 bool gadget_voice_interrupt(void) { return interrupt_result; }
 int gadget_voice_configure(const impo_arcs_voice_config_t *c) { return c ? 0 : -1; }
+int gadget_voice_reply_configure(bool incremental) { (void)incremental;return 0; }
+int gadget_voice_tail_configure(uint32_t keep_ms) { return keep_ms==300?0:-1; }
 void gadget_voice_snapshot(impo_arcs_voice_snapshot_t *out) { if (out) memset(out,0,sizeof(*out)); }
 impo_link_state_t impo_link_state(void) { return link_state; }
 gadget_voice_state_t gadget_voice_state(void) { return voice_state; }
@@ -52,6 +54,8 @@ int main(int argc,char **argv)
     assert(impo_arcs_mini_set_wake_enabled(false)==0);
     assert(!impo_arcs_mini_wake_available()); available=true; assert(impo_arcs_mini_wake_available());
     assert(impo_arcs_mini_send_event("test",NULL)==9);
+    assert(!impo_arcs_mini_configure_voice_tail(300));
+    assert(impo_arcs_mini_configure_voice_tail(1)==-1);
     printf("SDK API: %s profile, busy/offline handling and official delegation passed\n",p->id);
     return 0;
 }

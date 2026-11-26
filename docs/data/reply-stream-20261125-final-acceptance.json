@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "installed_image": {
+    "product": "arcs-mini2-playback",
+    "voice": {
+      "upload_mode": "batch",
+      "endpoint_pause_ms": 1200
+    },
+    "listenai_sdk_version": "0.1.8",
+    "image_bytes": 1876904,
+    "image_sha256": "e54675a9442d8056c4a59ddba317fb9ec56326a17b99fdcedf540c8c2edc29cd",
+    "wake_bundle": "xiaozhou-single-mic",
+    "retained_ap_required": true,
+    "independent_cp_readback_matches": true,
+    "all_non_cp_bytes_unchanged": true
+  },
+  "runtime": {
+    "wake_label": "小周小周",
+    "online": true,
+    "display_ok": true,
+    "speaker_volume_percent": 20,
+    "default_full": true,
+    "incremental_toggle": true,
+    "full_restore": true,
+    "batch1200_config": true,
+    "probe_errors_zero": true,
+    "reply_segments_zero": true,
+    "same_boot": true,
+    "no_voice_turn_sent": true,
+    "idle_wake_restored": true,
+    "online_after": true,
+    "adaptive1200full_config_accepted": true,
+    "prefill_stat_zero_before_first_playback": true
+  },
+  "host_validation": {
+    "tests_run_sh_arcs016": true,
+    "voice_tests_arcs018": true,
+    "address_undefined_sanitizers": true,
+    "leak_check": false,
+    "build_default_arcs016": true,
+    "build_button_companion_arcs016": true,
+    "build_mini2_arcs018": true
+  },
+  "acceptance": {
+    "compile": true,
+    "independent_cp_readback": true,
+    "non_cp_preserved": true,
+    "online_and_config_smoke": true,
+    "final_image_voice_trials": 0,
+    "final_image_acoustic_acceptance": false,
+    "human_listening_acceptance": false,
+    "end_to_end_speedup_established": false
+  },
+  "default_reply_mode": "full",
+  "incremental_mode": "experimental opt-in; final coalescing strategy not acoustically measured"
+}

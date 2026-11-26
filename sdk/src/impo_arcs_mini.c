@@ -46,6 +46,10 @@ int impo_arcs_mini_configure_voice(const impo_arcs_voice_config_t *config)
 { return gadget_voice_configure(config); }
 void impo_arcs_mini_voice_snapshot(impo_arcs_voice_snapshot_t *out)
 { gadget_voice_snapshot(out); }
+int impo_arcs_mini_configure_reply(bool incremental)
+{ return gadget_voice_reply_configure(incremental); }
+int impo_arcs_mini_configure_voice_tail(uint32_t keep_ms)
+{ return gadget_voice_tail_configure(keep_ms); }
 
 int impo_arcs_mini_configure_playback(const impo_arcs_playback_config_t *c) { return gadget_speech_configure(c); }
 void impo_arcs_mini_playback_snapshot(impo_arcs_playback_snapshot_t *out) { gadget_speech_snapshot(out); }

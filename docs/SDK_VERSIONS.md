@@ -1,12 +1,12 @@
 # SDK 版本与固件对应关系
 
-本项目是一套共用源码的 **Impo ARCS Mini SDK 0.1.0**，支持按 **ListenAI ARCS SDK 0.1.6 / 0.1.8** 两种底层版本构建。公共接口、产品配置、应用组件和官方 Impo 协议实现共用；聆思底层依赖、兼容配置、预编译库及固件产物分别使用。
+本项目是一套共用源码的 **Impo ARCS Mini SDK 0.2.3**，支持按 **ListenAI ARCS SDK 0.1.6 / 0.1.8** 两种底层版本构建。公共接口、产品配置、应用组件和官方 Impo 协议实现共用；聆思底层依赖、兼容配置、预编译库及固件产物分别使用。
 
 ## 版本层级
 
 | 对象 | 当前标记 | 含义与来源 |
 | --- | --- | --- |
-| 本项目 SDK | `0.1.0` | `sdk/include/impo_arcs_mini.h` 的 `IMPO_ARCS_MINI_SDK_VERSION`；两个底层目标使用同一公共接口 |
+| 本项目 SDK | `0.2.3` | `sdk/include/impo_arcs_mini.h` 的 `IMPO_ARCS_MINI_SDK_VERSION`；两个底层目标使用同一公共接口 |
 | Impo 官方 Gadget SDK | 提交 `ad0e6b7527501248631569516483e4845e2e5665` 加项目补丁 | `dependencies.lock.json` 与 `patches/`；配对、Link、国内路由及语音共用 |
 | 聆思官方 ARCS SDK | **`0.1.6` 或 `0.1.8`** | 开发者分别提供对应 `ARCS_BASE`；不是本项目先前刷入固件的版本号 |
 | 设备保留的 Boot / AP / 原机应用 | 按每台设备读取并记录 | 决定目标兼容条件；原机应用的 `3.x` 版本不能代替 AP 所用底层版本 |

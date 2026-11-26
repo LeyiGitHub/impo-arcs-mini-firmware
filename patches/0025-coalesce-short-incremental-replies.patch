@@ -1,0 +1,30 @@
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -577,7 +577,7 @@
+             xSemaphoreTake(s_lock,portMAX_DELAY);
+             if(s_active && s_acked && (stream_open || !busy)) {
+                 impo_arcs_reply_probe_refresh(s_ack.message_id,s_ack.reply_to_message_id,&s_stats.reply_probe);
+-                take=impo_arcs_reply_probe_take(s_ack.message_id,s_ack.reply_to_message_id,&segment,&last);
++                take=impo_arcs_reply_probe_take(s_ack.message_id,s_ack.reply_to_message_id,&segment,&last,plat_uptime_ms());
+                 if(take<0){s_stats.reply_mismatches++;fail_locked();}
+                 if(s_stats.reply_probe.final_ms && !(s_stats.valid_stages&(1u<<IMPO_VOICE_MESSAGE_DONE))) {
+                     s_stats.stage_ms[IMPO_VOICE_MESSAGE_DONE]=s_stats.reply_probe.final_ms;
+--- a/arcs/gadget/gadget_speech.c
++++ b/arcs/gadget/gadget_speech.c
+@@ -130,6 +130,7 @@
+             s_text_head=(s_text_head+1)%STREAM_QUEUE;s_text_count--;s_text_bytes-=strlen(text);
+         }
+         uint64_t progress=s_text_progress;
++        unsigned requested=s_stats.segments_requested;
+         impo_arcs_playback_config_t config=s_config;
+         xSemaphoreGive(s_lock);
+         if(active && abort)goto failed;
+@@ -147,7 +148,7 @@
+         if(!active||!text){vTaskDelay(pdMS_TO_TICKS(5));continue;}
+         if(!request) {
+             /* Leave ample PCM room before prefetching another segment. */
+-            if(offset && gadget_sound_room()<GADGET_SOUND_RATE*24u){vTaskDelay(pdMS_TO_TICKS(5));continue;}
++            if((offset || (streaming && requested)) && gadget_sound_room()<GADGET_SOUND_RATE*24u){vTaskDelay(pdMS_TO_TICKS(5));continue;}
+             size_t n=segment_len(text,offset,!streaming && config.sentence_tts);
+             char save=text[offset+n];text[offset+n]=0;
+             cJSON *body=cJSON_CreateObject();if(body)cJSON_AddStringToObject(body,"text",text+offset);

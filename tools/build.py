@@ -27,6 +27,8 @@ except ValueError as error:
 sdk = prepare(a.sdk, a.product, a.font)
 build_dir = build_directory(profile["id"], a.arcs_sdk_version)
 product_dir = sdk / "arcs/products" / profile["id"]
+product_inputs = {name: hashlib.sha256((product_dir / name).read_bytes()).hexdigest()
+                  for name in ("product.conf", "impo_product_config.h", "product.manifest.json")}
 sdk_conf = "components/impo_arcs_mini/profiles/listenai-" + a.arcs_sdk_version + ".conf"
 args = ["bash", "build.sh", "-S", "app", "-B", build_dir, "-t", "mkhdr", "-DBOARD=arcs_mini_yunbao",
         "-DCONFIG_FILES=" + str(product_dir / "product.conf") + ";" + str(sdk / "arcs" / sdk_conf),
@@ -54,10 +56,16 @@ for attempt in range(2):
         continue
     result.check_returncode()
     break
+if any(hashlib.sha256((product_dir / name).read_bytes()).hexdigest() != digest
+       for name, digest in product_inputs.items()):
+    raise SystemExit("Product inputs changed during compilation; rebuild without parallel SDK preparation before flashing")
 check(sdk / "arcs" / build_dir, wake_enabled=profile["wake"]["enabled"], arcs_sdk_version=a.arcs_sdk_version)
 firmware = sdk / "arcs" / build_dir / "impo-gadget.bin"
 metadata = {"product": profile["id"], "voice": profile["voice"], "listenai_sdk_version": a.arcs_sdk_version,
+            "sdk_version": json.loads((product_dir / "product.manifest.json").read_text())["sdk_version"],
+            "platform_product_id": profile["product_id"], "application": app.name if app else "default-companion",
             "image_bytes": firmware.stat().st_size, "image_sha256": hashlib.sha256(firmware.read_bytes()).hexdigest(),
             "wake_bundle": profile["wake"]["id"], "retained_ap_required": True}
+metadata["product_input_sha256"] = product_inputs
 (firmware.parent / "impo-sdk-build.json").write_text(json.dumps(metadata, indent=2) + "\n")
 print("Firmware:", sdk / "arcs" / build_dir / "impo-gadget.bin")

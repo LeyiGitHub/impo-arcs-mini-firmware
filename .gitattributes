@@ -1,2 +1,4 @@
 # Unified patches contain a required single-space prefix on blank context lines.
 *.patch -whitespace
+# Preserve the pinned upstream header byte-for-byte, including its whitespace.
+sdk/third_party/stb_image.h -whitespace

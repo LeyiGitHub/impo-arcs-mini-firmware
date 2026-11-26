@@ -20,6 +20,9 @@ playback timing request=100 body=120 pcm=130 first=180 last=12000'''
         self.assertEqual(row['segments_requested'],2)
         self.assertEqual(row['underrun_ms'],200)
         self.assertEqual(row['first_write_ms'],180)
+        row=snapshot(text+'\nplayback http submit=105 status=115')
+        self.assertEqual(row['first_submit_ms'],105)
+        self.assertEqual(row['first_status_ms'],115)
         with self.assertRaises(ValueError):snapshot(text.split('playback timing')[0])
 
     def test_public_export_retains_failure_and_excludes_private_fields(self):

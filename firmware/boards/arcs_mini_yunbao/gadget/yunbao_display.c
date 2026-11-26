@@ -14,6 +14,8 @@
 #include "yunbao_display.h"
 #include "yunbao_screen_ui.h"
 #include "gadget_voice.h"
+#include "impo_arcs_companion.h"
+#include "impo_arcs_image.h"
 #define TAG "yunbao_display"
 #include "lisa_log.h"
 
@@ -22,7 +24,7 @@ static volatile bool s_ready, s_color_test;
 static volatile uint32_t s_test_at, s_frames;
 static volatile int s_error;
 void yunbao_display_show(gadget_status_t status) { s_requested = status; }
-void yunbao_display_restore(void) { s_color_test = false; }
+void yunbao_display_restore(void) { s_color_test = false; impo_arcs_companion_restore(); }
 
 static void display_task(void *arg)
 {
@@ -61,6 +63,9 @@ static void display_task(void *arg)
     int previous = -1;
     int previous_voice = -1;
     uint32_t previous_phase = UINT32_MAX;
+    uint32_t previous_revision = UINT32_MAX;
+    uint32_t previous_image_revision = UINT32_MAX;
+    unsigned previous_remaining = UINT32_MAX;
     bool previous_test = false, previous_wake = false, previous_dialogue = false;
     for (;;) {
         uint32_t now = (uint32_t)plat_uptime_ms();
@@ -68,17 +73,23 @@ static void display_task(void *arg)
         gadget_status_t state = s_requested;
         impo_arcs_voice_snapshot_t voice;
         gadget_voice_snapshot(&voice);
+        impo_arcs_companion_view_t companion;
+        impo_arcs_companion_view(&companion);
         bool animated = state == GADGET_STATUS_LISTENING || state == GADGET_STATUS_THINKING ||
                         state == GADGET_STATUS_SPEAKING || state == GADGET_STATUS_CONNECTING;
         uint32_t phase = animated ? now/400 : now%5000 >= 4800;
         bool test = s_color_test, wake = gadget_voice_wakeup_available(), dialogue = gadget_voice_continuous_active();
-        if (previous != (int)state || previous_voice != (int)voice.phase || previous_phase != phase || previous_test != test || previous_wake != wake || previous_dialogue != dialogue) {
-            yunbao_screen_render_voice(pixels, caps.width, caps.height, state, now, test, wake, dialogue, voice.phase);
+        if (previous != (int)state || previous_voice != (int)voice.phase || previous_phase != phase || previous_test != test || previous_wake != wake || previous_dialogue != dialogue || previous_revision != companion.revision || previous_image_revision != companion.image_revision || previous_remaining != companion.timer_remaining) {
+            yunbao_screen_render_companion(pixels, caps.width, caps.height, state, now, test, wake, dialogue, voice.phase, &companion);
+            if (!test && state==GADGET_STATUS_IDLE && voice.phase==IMPO_VOICE_IDLE)
+                impo_arcs_image_copy(pixels,caps.width,caps.height);
             r = lisa_display_write(dev, 0, 0, &desc, pixels);
             if (r) { s_error = r; LISA_LOGE(TAG, "frame write failed: %d", r); }
             else { s_error = 0; s_frames++; }
             previous = state; previous_phase = phase; previous_test = test; previous_wake = wake; previous_dialogue = dialogue;
             previous_voice = voice.phase;
+            previous_revision = companion.revision; previous_remaining = companion.timer_remaining;
+            previous_image_revision = companion.image_revision;
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }

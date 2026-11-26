@@ -1,0 +1,308 @@
+{
+  "schema_version": 1,
+  "analysis_date": "2026-11-25",
+  "scope": "Offline attribution from existing device records and same-device playback policy comparisons; no new voice test or live configuration query",
+  "conclusion": {
+    "strongest_demonstrated_advantage": "Earlier playback after first decoded PCM, rather than waiting for the full utterance audio",
+    "three_device_ranking_established": false,
+    "wake_word_causal_advantage_established": false,
+    "cloud_asr_or_llm_speedup_established": false,
+    "current_live_device_configurations_rechecked": false
+  },
+  "policy_evidence": {
+    "xiaozhou_last_validated": "batch / endpoint 1200 ms / full reply / adaptive 1200 ms / full TTS text",
+    "yunbao_archived": "complete PCM or 25-second audio reserve before playback",
+    "xiaoling_archived": "complete PCM or 25-second audio reserve before playback",
+    "current_product_defaults": {
+      "yunbao": "complete",
+      "arcs-mini2-xiaoling": "complete",
+      "arcs-mini2-playback": "adaptive 1200 ms"
+    },
+    "note": "Product defaults and archived logs do not prove present live configuration on all three devices"
+  },
+  "same_device_policy_experiments": [
+    {
+      "source": "playback-20261125-release-matched-20.json",
+      "source_sha256": "2a44431da72809c127a697c9a41526714936c72b3dc00f4cc3a4a155af168287",
+      "image": {
+        "image_sha256": "90d0638523d57355c7530e3cb9893c3e19593f49425a20dc2f6d875d0e8d876c",
+        "image_bytes": 1871432,
+        "product": "arcs-mini2-playback",
+        "listenai_sdk_version": "0.1.8"
+      },
+      "text_sha256": "30a4b50d3b871259e9bdd9167bdf81f550074239f802c834d03e22575c7f8e84",
+      "text_codepoints": 38,
+      "groups": {
+        "complete": {
+          "device_interval_medians_ms": {
+            "tts_to_first_body": 3606.0,
+            "tts_to_first_pcm": 3609.5,
+            "tts_to_first_driver_write": 7273.5,
+            "first_body_to_first_pcm": 3.5,
+            "first_pcm_to_first_driver_write": 3537.5
+          },
+          "acoustic_summary": {
+            "attempts": 10,
+            "successes": 10,
+            "acoustic_valid": 7,
+            "underruns": 0,
+            "failed_or_unknown": 0,
+            "p50_ms": 7959,
+            "p95_ms": 9385
+          }
+        },
+        "adaptive": {
+          "device_interval_medians_ms": {
+            "tts_to_first_body": 3872.0,
+            "tts_to_first_pcm": 3876.5,
+            "tts_to_first_driver_write": 4189.5,
+            "first_body_to_first_pcm": 3.0,
+            "first_pcm_to_first_driver_write": 487.0
+          },
+          "acoustic_summary": {
+            "attempts": 10,
+            "successes": 10,
+            "acoustic_valid": 8,
+            "underruns": 0,
+            "failed_or_unknown": 0,
+            "p50_ms": 4756,
+            "p95_ms": 5445
+          }
+        }
+      },
+      "paired": [
+        {
+          "cycle": 1,
+          "first_body_reduction_ms": 380,
+          "pcm_to_driver_reduction_ms": 6629,
+          "request_to_driver_reduction_ms": 7012
+        },
+        {
+          "cycle": 2,
+          "first_body_reduction_ms": -225,
+          "pcm_to_driver_reduction_ms": 4903,
+          "request_to_driver_reduction_ms": 4679
+        },
+        {
+          "cycle": 3,
+          "first_body_reduction_ms": 179,
+          "pcm_to_driver_reduction_ms": 3926,
+          "request_to_driver_reduction_ms": 4105
+        },
+        {
+          "cycle": 4,
+          "first_body_reduction_ms": -938,
+          "pcm_to_driver_reduction_ms": 2577,
+          "request_to_driver_reduction_ms": 1639
+        },
+        {
+          "cycle": 5,
+          "first_body_reduction_ms": 159,
+          "pcm_to_driver_reduction_ms": 2048,
+          "request_to_driver_reduction_ms": 2205
+        },
+        {
+          "cycle": 6,
+          "first_body_reduction_ms": -111,
+          "pcm_to_driver_reduction_ms": 3104,
+          "request_to_driver_reduction_ms": 2993
+        },
+        {
+          "cycle": 7,
+          "first_body_reduction_ms": 239,
+          "pcm_to_driver_reduction_ms": 3455,
+          "request_to_driver_reduction_ms": 3694
+        },
+        {
+          "cycle": 8,
+          "first_body_reduction_ms": -513,
+          "pcm_to_driver_reduction_ms": 2418,
+          "request_to_driver_reduction_ms": 1905
+        },
+        {
+          "cycle": 9,
+          "first_body_reduction_ms": 392,
+          "pcm_to_driver_reduction_ms": 3441,
+          "request_to_driver_reduction_ms": 3835
+        },
+        {
+          "cycle": 10,
+          "first_body_reduction_ms": -500,
+          "pcm_to_driver_reduction_ms": 3096,
+          "request_to_driver_reduction_ms": 2597
+        }
+      ],
+      "paired_reduction_medians_ms": {
+        "first_body_reduction_ms": 24.0,
+        "pcm_to_driver_reduction_ms": 3272.5,
+        "request_to_driver_reduction_ms": 3343.5
+      },
+      "acoustic_p50_group_difference_ms": 3203,
+      "limitations": [
+        "TTS command to sound, not user speech end to answer",
+        "Different generated waveforms despite fixed input text",
+        "Acoustic rejects remain in attempted counts",
+        "Small single-text corpus",
+        "Medians are not additive"
+      ]
+    },
+    {
+      "source": "playback-20261125-release-short-8.json",
+      "source_sha256": "85f74af30c2d9a033b7024ca4539cd749f44c24b3a952dcc1b5572069e6b4842",
+      "image": {
+        "image_sha256": "90d0638523d57355c7530e3cb9893c3e19593f49425a20dc2f6d875d0e8d876c",
+        "image_bytes": 1871432,
+        "product": "arcs-mini2-playback",
+        "listenai_sdk_version": "0.1.8"
+      },
+      "text_sha256": "1b5058937c427510eddade42c65fbf382e6f660827a54420144a17dc9f7473ba",
+      "text_codepoints": 18,
+      "groups": {
+        "complete": {
+          "device_interval_medians_ms": {
+            "tts_to_first_body": 2929.0,
+            "tts_to_first_pcm": 2931.0,
+            "tts_to_first_driver_write": 4362.0,
+            "first_body_to_first_pcm": 2.5,
+            "first_pcm_to_first_driver_write": 1317.0
+          },
+          "acoustic_summary": {
+            "attempts": 4,
+            "successes": 4,
+            "acoustic_valid": 2,
+            "underruns": 0,
+            "failed_or_unknown": 0,
+            "p50_ms": 5194,
+            "p95_ms": 5226
+          }
+        },
+        "adaptive": {
+          "device_interval_medians_ms": {
+            "tts_to_first_body": 2906.5,
+            "tts_to_first_pcm": 2908.5,
+            "tts_to_first_driver_write": 3215.5,
+            "first_body_to_first_pcm": 2.0,
+            "first_pcm_to_first_driver_write": 285.0
+          },
+          "acoustic_summary": {
+            "attempts": 4,
+            "successes": 4,
+            "acoustic_valid": 4,
+            "underruns": 0,
+            "failed_or_unknown": 0,
+            "p50_ms": 4349,
+            "p95_ms": 5277
+          }
+        }
+      },
+      "paired": [
+        {
+          "cycle": 1,
+          "first_body_reduction_ms": -1350,
+          "pcm_to_driver_reduction_ms": 1286,
+          "request_to_driver_reduction_ms": -62
+        },
+        {
+          "cycle": 2,
+          "first_body_reduction_ms": 4247,
+          "pcm_to_driver_reduction_ms": 611,
+          "request_to_driver_reduction_ms": 4859
+        },
+        {
+          "cycle": 3,
+          "first_body_reduction_ms": 106,
+          "pcm_to_driver_reduction_ms": 643,
+          "request_to_driver_reduction_ms": 749
+        },
+        {
+          "cycle": 4,
+          "first_body_reduction_ms": -61,
+          "pcm_to_driver_reduction_ms": 1649,
+          "request_to_driver_reduction_ms": 1588
+        }
+      ],
+      "paired_reduction_medians_ms": {
+        "first_body_reduction_ms": 22.5,
+        "pcm_to_driver_reduction_ms": 964.5,
+        "request_to_driver_reduction_ms": 1168.5
+      },
+      "acoustic_p50_group_difference_ms": 845,
+      "limitations": [
+        "TTS command to sound, not user speech end to answer",
+        "Different generated waveforms despite fixed input text",
+        "Acoustic rejects remain in attempted counts",
+        "Small single-text corpus",
+        "Medians are not additive"
+      ]
+    }
+  ],
+  "historical_unmatched_device_observations": {
+    "source_sha256": "e74d5a1934e151343b53ea68eb7e4bfad651144fc33903941cd2fc0c21a670e6",
+    "source": "VOICE_LATENCY_DESIGN.md baseline table, derived from archived device logs",
+    "matched_audio": false,
+    "metric": "Capture end to playback buffer release, not acoustic sound",
+    "devices": {
+      "original_yunbao_relay": {
+        "sdk": "ListenAI 0.1.6",
+        "image_sha256": "fe3f2eb2c06f6de21f5cdb6915c237414b92987d558803763cd8358b6a605d49",
+        "turns": [
+          {
+            "record_end_to_queued": 1.198,
+            "queued_to_ack": 1.247,
+            "record_end_to_ack": 2.445,
+            "ack_to_complete_reply": 5.157,
+            "complete_reply_to_audio_ready": 2.842,
+            "record_end_to_audio_ready": 10.444,
+            "screen_thinking": 7.55
+          },
+          {
+            "record_end_to_queued": 1.094,
+            "queued_to_ack": 1.231,
+            "record_end_to_ack": 2.325,
+            "ack_to_complete_reply": 4.59,
+            "complete_reply_to_audio_ready": 2.772,
+            "record_end_to_audio_ready": 9.687,
+            "screen_thinking": 6.857
+          }
+        ]
+      },
+      "arcs_mini2_tls_fixed": {
+        "sdk": "ListenAI 0.1.8",
+        "image_sha256": "4ea8f0388ed8ade16330f3c10b0f9ddbeb4d70aadf95c4f2e054f843c88531bc",
+        "turns": [
+          {
+            "record_end_to_queued": 1.75,
+            "queued_to_ack": 1.405,
+            "record_end_to_ack": 3.155,
+            "ack_to_complete_reply": 8.912,
+            "complete_reply_to_audio_ready": 2.647,
+            "record_end_to_audio_ready": 14.714,
+            "screen_thinking": 11.931
+          },
+          {
+            "record_end_to_queued": 6.059,
+            "queued_to_ack": 1.516,
+            "record_end_to_ack": 7.575,
+            "ack_to_complete_reply": 4.895,
+            "complete_reply_to_audio_ready": 2.401,
+            "record_end_to_audio_ready": 14.871,
+            "screen_thinking": 12.403
+          }
+        ]
+      }
+    },
+    "note": "arcs_mini2_tls_fixed is the archived Xiaoling device; these old two-turn samples cannot rank present devices"
+  },
+  "last_xiaozhou_validation": {
+    "source": "reply-stream-20261125-coalesced-validation.json",
+    "image": {
+      "image_sha256": "e54675a9442d8056c4a59ddba317fb9ec56326a17b99fdcedf540c8c2edc29cd",
+      "image_bytes": 1876904,
+      "product": "arcs-mini2-playback",
+      "listenai_sdk_version": "0.1.8",
+      "wake_bundle": "xiaozhou-single-mic"
+    },
+    "default_restored_after_validation": "batch 1200 ms / full reply / adaptive 1200 ms full",
+    "note": "This later image is distinct from the playback policy experiment image; do not relabel the earlier twenty trials as testing this image"
+  }
+}

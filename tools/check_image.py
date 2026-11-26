@@ -55,6 +55,13 @@ def check(build, wake_enabled=True, arcs_sdk_version=None):
         raise SystemExit("Incomplete generated archive: " + str(bad[0]))
     symbols = (build / "impo-gadget.symb").read_text()
     required = REQUIRED + (("impo_arcs_wake_resources", "impo_arcs_wake_result") if wake_enabled else ())
+    config = dict(line.split("=", 1) for line in (build / ".config").read_text().splitlines()
+                  if line.startswith("CONFIG_")) if (build / ".config").exists() else {}
+    if config.get("CONFIG_LISA_CAMERA_DEVICE") == "y":
+        required += ("__lisa_device_registry_camera", "__lisa_device_registry_camera_bus",
+                     "__lisa_device_registry_dvp0", "__lisa_device_registry_i2c0", "camera_cmd",
+                     "yunbao_camera_capture", "cmd_camera_capture", "link_camera_invoke",
+                     "impo_arcs_camera_encode")
     if arcs_sdk_version == "0.1.8":
         required += ("ipc_auto_init", "ipc_mem_validate", "impo_arcs_boot_watchdog_handoff")
     elif arcs_sdk_version == "0.1.6":
@@ -69,8 +76,6 @@ def check(build, wake_enabled=True, arcs_sdk_version=None):
     if image[336:340] != b"ARCS" or struct.unpack_from("<I", image, 324)[0] != size:
         raise SystemExit("Missing or inconsistent ARCS boot header")
     if arcs_sdk_version == "0.1.8":
-        config = dict(line.split("=", 1) for line in (build / ".config").read_text().splitlines()
-                      if line.startswith("CONFIG_"))
         check_psram_contract(image, int(config["CONFIG_MEM_PSRAM_BASE"], 0),
                              int(config["CONFIG_MEM_PSRAM_SIZE"], 0))
     print("Image check: archives, device registry, SDK hooks, wake/dialogue and CP size passed")

@@ -1,0 +1,291 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-26",
+  "timezone": "Asia/Shanghai",
+  "scope": "Public official source audit, host regressions, three candidate builds and original Yunbao 0.1.6 CP flash with basic live-cloud, playback, physical wake and acoustic checks; no fleet or long-term stability acceptance",
+  "official": {
+    "impo_gadget_sdk": {
+      "repository": "https://github.com/impoai/impo-gadget-sdk",
+      "commit": "90d1fbd5939f00eadd3f867d9cf7c15f779a7065",
+      "commit_time_utc": "2026-11-25T12:15:51Z",
+      "new_commits_since_previous_audit": 3,
+      "new_commits_since_local_pin": 9,
+      "arcs_files_changed_since_local_pin": [],
+      "github_releases": []
+    },
+    "impo_client": {
+      "repository": "https://github.com/impoai/impo",
+      "commit": "45cc0886917d8d864c957545ea4bbb7c5b89fa83",
+      "github_releases": []
+    },
+    "developer_skills": {
+      "repository": "https://github.com/impoai/impo-developer-skills",
+      "commit": "8577fb75388273fe3b954f8933923efce7737912"
+    },
+    "production_backend_version": null,
+    "device_realtime_asr_contract_verified": false
+  },
+  "local": {
+    "base_commit": "6aed7a3",
+    "sdk_version": "0.2.3",
+    "pinned_official_sdk": "ad0e6b7527501248631569516483e4845e2e5665",
+    "existing_uncommitted_work_preserved": true,
+    "dependency_pin_changed": false,
+    "pushed": false,
+    "initial_audit_committed": false,
+    "prerequisite_companion_image_camera_work_included": true
+  },
+  "patches": [
+    {
+      "path": "patches/0030-coalesce-websocket-writes.patch",
+      "sha256": "9ef7170fb35abb1ec7817b9a3712f405230512c3b13ed774f7f270b33a5da630"
+    },
+    {
+      "path": "patches/0031-batch-voice-tail-margin.patch",
+      "sha256": "f638d4205a97fb1d910a760224b157f404ba04424845bb77b9ba7b5d8aa7dd97"
+    },
+    {
+      "path": "patches/0032-bound-tts-segments.patch",
+      "sha256": "9e415e38d496f399fd980139402ad436e1b3b22af16fef6d17e97784e78a94f9"
+    }
+  ],
+  "defaults": {
+    "upload": "batch",
+    "endpoint_ms": 1200,
+    "reply": "full",
+    "tail_keep_ms": 0,
+    "playback_policy": "unchanged per product"
+  },
+  "host_checks": {
+    "full_suite": "passed",
+    "final_voice_suite_after_buffer_release_accounting": "passed",
+    "ws_real_writer_asan_ubsan_512_and_4096": "passed",
+    "bench_metric_parsing_and_export": "passed"
+  },
+  "synthetic_results": {
+    "ws_2048_payload_tls_api_calls_before": 5,
+    "ws_2048_payload_tls_api_calls_after": 1,
+    "tail_test_keep_ms": 300,
+    "tail_test_captured_pcm_bytes": 76800,
+    "tail_test_trimmed_pcm_bytes": 28800,
+    "tail_test_base64_bytes_removed": 38400,
+    "tts_max_codepoints": 120,
+    "unpunctuated_unicode_long_reply_and_final_suffix": "passed",
+    "complete_buffer_multiple_8_second_segments": "passed"
+  },
+  "candidate_builds": [
+    {
+      "product": "yunbao",
+      "voice": {
+        "upload_mode": "batch",
+        "endpoint_pause_ms": 1200
+      },
+      "listenai_sdk_version": "0.1.6",
+      "sdk_version": "0.2.3",
+      "application": "default-companion",
+      "image_bytes": 2571580,
+      "image_sha256": "8755e2d5c23f371c08e8a57c71363faea0b39e96f157e6f2abd6218081346f7a",
+      "wake_bundle": "yunbao-original-single-mic",
+      "retained_ap_required": true,
+      "product_input_sha256": {
+        "product.conf": "a62fc06e01e64e5646455979f748c7d76c0a3f7fe3e0cfb8e0d21f1aa6ca93d7",
+        "impo_product_config.h": "2ebea1db0f40016b752156f6271200f416b7fe833c4e183d7951bfbfe942ffb8",
+        "product.manifest.json": "58f57b276a807a32c87f7646084fae32c8be6303a1858a85253c7d6aed8deb38"
+      },
+      "artifact_directory": "outputs/impo-cloud-optimization-20261126/yunbao-016",
+      "image_check": "passed",
+      "linker_memory_bytes": {
+        "SRAM": 153920,
+        "PSRAM": 5311760,
+        "FLASH": 2571580
+      }
+    },
+    {
+      "product": "mini-companion",
+      "voice": {
+        "upload_mode": "batch",
+        "endpoint_pause_ms": 1200
+      },
+      "listenai_sdk_version": "0.1.6",
+      "sdk_version": "0.2.3",
+      "application": "button_companion",
+      "image_bytes": 2538324,
+      "image_sha256": "0fcd1b5523c05d190ae51e028f225561e5a9d30f514960a3f6103334e973a148",
+      "wake_bundle": "disabled",
+      "retained_ap_required": true,
+      "product_input_sha256": {
+        "product.conf": "9efa4eb67f2fc5b0ce51168eb15adf4a5b8c26ffe6c8bd18589d7ad99029c48c",
+        "impo_product_config.h": "6a04fc32064897f506ec45aaff7cd5ebd6de99d9d1f72515d59dd6c3c4027e5f",
+        "product.manifest.json": "29ac22109f25710af897ef35664d6c2927f14010fcc50b1487a791117902fec5"
+      },
+      "artifact_directory": "outputs/impo-cloud-optimization-20261126/button-016",
+      "image_check": "passed",
+      "linker_memory_bytes": {
+        "SRAM": 153920,
+        "PSRAM": 5311760,
+        "FLASH": 2538324
+      }
+    },
+    {
+      "product": "arcs-mini2-playback",
+      "voice": {
+        "upload_mode": "batch",
+        "endpoint_pause_ms": 1200
+      },
+      "listenai_sdk_version": "0.1.8",
+      "sdk_version": "0.2.3",
+      "application": "default-companion",
+      "image_bytes": 2607092,
+      "image_sha256": "6654eee87d7e4d0c6d2f2cd50ea577be548dc1bdfa9701bccb36577bb6f9ef24",
+      "wake_bundle": "xiaozhou-single-mic",
+      "retained_ap_required": true,
+      "product_input_sha256": {
+        "product.conf": "74ba25b6965e93eb3aac750ed260c6e848558d1e7d58958517e82e5cc5ce5287",
+        "impo_product_config.h": "3d1237c8f2db422b143cd8c733f5b0853d8a01c9590f29c844ceedf27c4086d8",
+        "product.manifest.json": "f50020b8b34c940feb85d87867c597cc454d0ddaf4c203c162ea99c3e05808d7"
+      },
+      "artifact_directory": "outputs/impo-cloud-optimization-20261126/playback-018",
+      "image_check": "passed",
+      "rebuilt_incomplete_generated_archive": "lib_inner_app.a",
+      "linker_memory_bytes": {
+        "SRAM": 154768,
+        "PSRAM": 5313392,
+        "FLASH": 2607092
+      }
+    }
+  ],
+  "acceptance": {
+    "device_flashed": true,
+    "live_cloud_round_trip_tested": true,
+    "acoustic_tested": true,
+    "runtime_peak_memory_measured": false,
+    "end_to_end_latency_gain_ms": null,
+    "existing_xiaoling_heap_corruption_resolved": false,
+    "human_hearing_confirmed": false,
+    "transcript_and_answer_content_verified": false,
+    "other_devices_flashed": false,
+    "long_term_or_mixed_load_stability_accepted": false
+  },
+  "next_gates": [
+    "DNS/TCP connect timing and deadline coverage for both ListenAI SDKs",
+    "matched multi-trial voice/long-Chinese, human hearing, network recovery and mixed-load tests before other devices",
+    "independent multi-trial tail trim transcript and acoustic A/B; remains disabled by default",
+    "streaming MP3 decoder adaptation and AAC encoder selection",
+    "cloud streaming ASR/idempotency/cancellation/trace contract",
+    "whole-run completion and silent prepare/start for relay"
+  ],
+  "device_validation": {
+    "target": "original Yunbao; retained ListenAI AP 0.1.6; 你好云宝 wake bundle",
+    "unique_recovery_identity_checked_before_write": true,
+    "two_equal_full_flash_backups": true,
+    "backup_bytes": 16777216,
+    "boot_ap_resources_match_verified_baseline": true,
+    "write_partition": "CP only",
+    "write_address_hex": "0x600000",
+    "cp_write_count": 1,
+    "image_sha256": "8755e2d5c23f371c08e8a57c71363faea0b39e96f157e6f2abd6218081346f7a",
+    "image_bytes": 2571580,
+    "independent_cp_readback_matches": true,
+    "all_non_cp_bytes_unchanged": true,
+    "pairing_preserved": true,
+    "speaker_volume_preserved_percent": 60,
+    "boot_and_final_identity_match": true,
+    "observed_check_window_seconds": 572,
+    "voice_trials": [
+      {
+        "tail_keep_ms": 0,
+        "attempts": 1,
+        "ok": true,
+        "chat_requests": 1,
+        "tts_requests": 1,
+        "captured_pcm_bytes": 172800,
+        "trimmed_pcm_bytes": 0,
+        "submitted_wav_bytes": 172844,
+        "mic_dropped_bytes": 0,
+        "voice_failed": 0,
+        "captured_trimmed_epoch_row_saved": false,
+        "capture_to_queued_ms": 1532,
+        "queued_to_ack_ms": 3341,
+        "ack_to_full_text_ms": 4949,
+        "acoustic_gap_ms": 13877,
+        "acoustic_valid": true,
+        "stimulus_tail_seen": true
+      },
+      {
+        "tail_keep_ms": 300,
+        "attempts": 1,
+        "ok": true,
+        "chat_requests": 1,
+        "tts_requests": 1,
+        "captured_pcm_bytes": 172160,
+        "trimmed_pcm_bytes": 28800,
+        "submitted_wav_bytes": 143404,
+        "mic_dropped_bytes": 0,
+        "voice_failed": 0,
+        "captured_trimmed_epoch_row_saved": true,
+        "capture_to_queued_ms": 1099,
+        "queued_to_ack_ms": 1412,
+        "ack_to_full_text_ms": 4503,
+        "acoustic_gap_ms": 11328,
+        "acoustic_valid": true,
+        "stimulus_tail_seen": true
+      }
+    ],
+    "voice_comparison_limit": "One sequential trial per setting; varied cloud ACK/text time. Automated acoustic energy proxy only. No causal or stable latency gain established; transcript and answer content not independently verified.",
+    "long_text": {
+      "codepoints": 129,
+      "completion_receipt": "completed",
+      "segments_requested": 2,
+      "segments_decoded": 2,
+      "played_samples": 169280,
+      "underruns": 0,
+      "ingress_overflows": 0,
+      "playback_policy": "complete",
+      "completed_checks": 2,
+      "full_recordings": 1,
+      "human_hearing_confirmed": false
+    },
+    "explicit_stop": {
+      "during_confirmed_audio_output": true,
+      "old_receipt": "interrupted",
+      "next_receipt": "completed",
+      "old_receipt_remains_interrupted": true,
+      "wake_interruption_tested": false
+    },
+    "physical_wake": {
+      "input": "Mac speaker: 你好云宝",
+      "detected": true,
+      "hits_delta": 1,
+      "entered_continuous_listening": true,
+      "returned_to_standby": true,
+      "chat_requests": 0
+    },
+    "final_state": {
+      "link_online": true,
+      "subscription_ready": true,
+      "wake_ready_enabled_listening": true,
+      "speaker_idle": true,
+      "speaker_volume_percent": 60,
+      "tail_keep_ms": 0,
+      "upload": "batch",
+      "endpoint_ms": 1200,
+      "reply": "full",
+      "playback": "complete"
+    },
+    "captured_fault_markers": [],
+    "automation_limits": [
+      "First long-text recording ended early after script used the wrong receipt field; read-only completion reconciled; partial recording excluded from full acoustic acceptance.",
+      "Final check version regex mismatch; correct version and final state reconciled read-only; no repeat wake or flash.",
+      "Initial delayed console output and transient USB enumeration were reconciled without repeated writes."
+    ],
+    "not_tested": [
+      "other devices",
+      "network loss and reconnection",
+      "long Chinese speech listening quality",
+      "camera/image physical and mixed-load regression",
+      "long-term stability",
+      "human hearing"
+    ],
+    "private_evidence_directory": "outputs/impo-cloud-optimization-20261126/device-validation"
+  }
+}

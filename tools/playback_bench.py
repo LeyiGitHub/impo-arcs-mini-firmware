@@ -14,6 +14,8 @@ def snapshot(text):
         m=re.search(pattern,text)
         if not m:raise ValueError('Incomplete playback snapshot')
         result.update(zip(names.split(),map(int,m.groups())))
+    http=re.search(r'playback http submit=(\d+) status=(\d+)',text)
+    if http:result.update(zip(['first_submit_ms','first_status_ms'],map(int,http.groups())))
     return result
 
 def main():

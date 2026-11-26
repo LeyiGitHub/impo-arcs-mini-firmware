@@ -1,0 +1,105 @@
+--- a/esp32/main/noise_control.cpp
++++ b/esp32/main/noise_control.cpp
+@@ -271,10 +271,9 @@
+ 
+ static constexpr int64_t WS_FRAME_TIMEOUT_US = 15000000;
+ 
+-static ssize_t write_all(esp_tls_t *tls, const void *buf, size_t len) {
++static ssize_t write_all_until(esp_tls_t *tls, const void *buf, size_t len, int64_t deadline) {
+     const uint8_t *p = static_cast<const uint8_t *>(buf);
+     size_t off = 0;
+-    int64_t deadline = esp_timer_get_time() + WS_FRAME_TIMEOUT_US;
+     while (off < len) {
+         if (!s_running || esp_timer_get_time() >= deadline) return -1;
+         ssize_t n = esp_tls_conn_write(tls, p + off, len - off);
+@@ -289,6 +288,10 @@
+     return static_cast<ssize_t>(off);
+ }
+ 
++static ssize_t write_all(esp_tls_t *tls, const void *buf, size_t len) {
++    return write_all_until(tls, buf, len, esp_timer_get_time() + WS_FRAME_TIMEOUT_US);
++}
++
+ static void make_uuid(char *out, size_t n) {
+     uint32_t a = esp_random(), b = esp_random(), c = esp_random(), d = esp_random();
+     snprintf(out, n, "%08lx-%04lx-%04lx-%04lx-%04lx%08lx",
+@@ -307,7 +310,21 @@
+ // WS upgrade and then passes raw binary payloads to ingress-rev-proxy.
+ 
+ // Send a masked binary WS frame.
++#ifndef NOISE_CTRL_WS_WRITE_BYTES
++#define NOISE_CTRL_WS_WRITE_BYTES 512
++#endif
+ static bool ws_send_binary(esp_tls_t *tls, const uint8_t *payload, size_t len) {
++    const int64_t deadline = esp_timer_get_time() + WS_FRAME_TIMEOUT_US;
++    // One session task owns this scratch. ARCS's >1 KB malloc goes to PSRAM;
++    // keep it across reconnects to avoid per-frame allocation and heap churn.
++#if NOISE_CTRL_WS_WRITE_BYTES > 1024
++    static uint8_t *chunk = nullptr;
++    if (!chunk) chunk = static_cast<uint8_t *>(malloc(NOISE_CTRL_WS_WRITE_BYTES));
++    if (!chunk) return false;
++#else
++    uint8_t chunk[NOISE_CTRL_WS_WRITE_BYTES];
++#endif
++    static_assert(NOISE_CTRL_WS_WRITE_BYTES >= 14, "WS scratch must fit its header");
+     // Frame header: FIN + opcode 0x2, MASK + payload length, 4-byte mask key.
+     uint8_t hdr[14];
+     size_t hdr_len = 0;
+@@ -323,7 +340,7 @@
+     } else {
+         hdr[1] = 0x80 | 127;
+         for (int i = 0; i < 8; i++) {
+-            hdr[2 + i] = static_cast<uint8_t>((len >> (56 - 8 * i)) & 0xff);
++            hdr[2 + i] = static_cast<uint8_t>((static_cast<uint64_t>(len) >> (56 - 8 * i)) & 0xff);
+         }
+         hdr_len = 10;
+     }
+@@ -333,24 +350,24 @@
+     memcpy(hdr + hdr_len, &mask_key, 4);
+     hdr_len += 4;
+ 
+-    if (write_all(tls, hdr, hdr_len) != static_cast<ssize_t>(hdr_len)) {
+-        return false;
+-    }
+-
+-    // Mask and send payload in chunks to avoid a full copy.
++    // Coalesce the header and masked bytes in bounded TLS-sized writes. No
++    // batching timer, request replay, Noise change or caller-buffer mutation.
+     const uint8_t *mk = reinterpret_cast<const uint8_t *>(&mask_key);
+-    uint8_t chunk[512];
++    memcpy(chunk, hdr, hdr_len);
++    size_t prefix = hdr_len;
+     size_t off = 0;
+-    while (off < len) {
+-        size_t n = (len - off < sizeof(chunk)) ? (len - off) : sizeof(chunk);
++    do {
++        size_t room = NOISE_CTRL_WS_WRITE_BYTES - prefix;
++        size_t n = (len - off < room) ? (len - off) : room;
+         for (size_t i = 0; i < n; i++) {
+-            chunk[i] = payload[off + i] ^ mk[(off + i) & 3];
+-        }
+-        if (write_all(tls, chunk, n) != static_cast<ssize_t>(n)) {
++            chunk[prefix + i] = payload[off + i] ^ mk[(off + i) & 3];
++        }
++        if (write_all_until(tls, chunk, prefix + n, deadline) != static_cast<ssize_t>(prefix + n)) {
+             return false;
+         }
+         off += n;
+-    }
++        prefix = 0;
++    } while (off < len);
+     return true;
+ }
+ 
+--- a/arcs/platform/arcs/esp_compat/include/sdkconfig.h
++++ b/arcs/platform/arcs/esp_compat/include/sdkconfig.h
+@@ -15,6 +15,9 @@
+ /* An Impo build: request streams (noise_ctrl_req_*), impo_commands_describe/
+  * capabilities and impo_state_power(), bridged to gadget/ in link/impo_glue_commands.c. */
+ #define CONFIG_IMPO_ENABLED 1
++/* Fit one complete typical 2 KB Noise body frame in one TLS write. Does not
++ * change the small-session RX capacity or the outbound request queue budget. */
++#define NOISE_CTRL_WS_WRITE_BYTES 4096
+ #include <stdbool.h>
+ bool gadget_voice_wakeup_available(void);
+ #define NOISE_CTRL_WAKEUP_SUPPORTED gadget_voice_wakeup_available()

@@ -1,0 +1,36 @@
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -166,6 +166,8 @@
+     reply.text = gadget_chat_feed(&s_chat, line, reply.parent);
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+     if (s_active) {
++        impo_arcs_reply_probe_observe(line, plat_uptime_ms(),
++            s_acked ? s_ack.message_id : NULL, s_acked ? s_ack.reply_to_message_id : NULL, &s_stats.reply_probe);
+         s_stats.subscription_lines++;
+         s_stats.missing_parent += s_chat.missing_parent - missing;
+         s_stats.text_not_ready += s_chat.not_ready - not_ready;
+@@ -416,6 +418,7 @@
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+     uint32_t boot_id = s_stats.boot_id;
+     memset(&s_stats, 0, sizeof(s_stats));
++    impo_arcs_reply_probe_reset();
+     s_stats.boot_id = boot_id;
+     s_stats.turn_epoch = ++s_epoch;
+     s_stats.session_epoch = s_session_epoch;
+@@ -649,6 +652,16 @@
+     LISA_LOGI(TAG, "voice_filter_turn epoch=%u missing=%u not_ready=%u duplicate=%u parent=%u state=%u",
+         (unsigned)stats.turn_epoch, (unsigned)stats.missing_parent, (unsigned)stats.text_not_ready,
+         (unsigned)stats.duplicate_replies, (unsigned)stats.rejected_parent, (unsigned)stats.rejected_state);
++    const impo_arcs_reply_probe_snapshot_t *p = &stats.reply_probe;
++    LISA_LOGI(TAG, "voice_delta epoch=%u start=%u append=%u done=%u full=%u other=%u",
++        (unsigned)stats.turn_epoch, (unsigned)p->starts, (unsigned)p->appends,
++        (unsigned)p->dones, (unsigned)p->fulls, (unsigned)p->other_deltas);
++    LISA_LOGI(TAG, "voice_delta_time epoch=%u first=%llu sentence=%llu final=%llu",
++        (unsigned)stats.turn_epoch, (unsigned long long)p->first_append_ms,
++        (unsigned long long)p->first_sentence_ms, (unsigned long long)p->final_ms);
++    LISA_LOGI(TAG, "voice_delta_match epoch=%u bytes=%u sentence=%u prefix=%u equal=%u errors=%u",
++        (unsigned)stats.turn_epoch, (unsigned)p->append_bytes, (unsigned)p->sentence_bytes,
++        p->final_prefix_matches, p->final_equals_appends, (unsigned)p->errors);
+     LISA_LOGI(TAG, "voice_capture_turn epoch=%u last_voice=%llu",
+         (unsigned)stats.turn_epoch, (unsigned long long)stats.stage_ms[IMPO_VOICE_LAST_VOICE]);
+     s_followup = test == NULL && s_session && complete && !s_stop && !s_interrupt;

@@ -2,7 +2,9 @@
 set -eu
 cd "$(dirname "$0")/.."
 python3 tests/test_product.py
+python3 tests/test_companion_manifest.py
 python3 tests/test_playback_bench.py
+python3 tests/test_reply_probe_export.py
 python3 tests/test_arcs_sdk.py
 python3 tools/prepare_sdk.py
 python3 tools/prepare_sdk.py --product examples/voice_companion/product.json

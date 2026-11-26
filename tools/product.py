@@ -109,7 +109,11 @@ def load_product(path=DEFAULT_PRODUCT):
               + (f"During a reply say {bundle['label']} to interrupt, then wait for the prompt before asking again. "
                  if p["wake_interrupt"] else "")
               + "Replies are spoken by its own speaker. Reply in the user's language in one to three short sentences without Markdown. "
-              "Its screen shows connection and voice status automatically. No camera, movement or motion sensor is advertised.")
+              "Its screen shows connection and voice status automatically. Its built-in camera supports on-demand camera.capture; open the returned image before describing it. No movement or motion sensor is advertised. "
+              "Use only registered commands. For speech keep boot_id/playback_id and query speaker.playback_status; idle alone is not completion. "
+              "Events are best-effort hints; verify the matching receipt. On interruption/failure cancel pending relay sentences; do not advance or replay automatically. "
+              "Do not speak acknowledgements for playback, timer or button events. Timer alarms run locally once and skip busy audio; timers vanish on reboot. "
+              "Use button event mode only for an active game, then restore voice mode. Display cards support short ASCII/GB2312 text. display.show_image accepts public HTTPS JPEG/PNG up to 256 KiB and 512x512; poll display.status.image for matching boot_id/image_id and ready/failed, not panel confirmation.")
     p["instructions"] = text(p.get("instructions", prompt), "instructions", 1500, multiline=True)
     return p
 

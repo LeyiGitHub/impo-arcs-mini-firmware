@@ -1,0 +1,223 @@
+--- a/arcs/gadget/gadget_board.h
++++ b/arcs/gadget/gadget_board.h
+@@ -20,6 +20,7 @@
+ 
+ #include <stdbool.h>
+ #include <stdint.h>
++#include <stddef.h>
+ 
+ #include "cJSON.h"
+ 
+@@ -135,6 +136,10 @@
+     /* Called when the device goes to standby or wakes; park actuators, pause sensors. NULL: nothing. */
+     void (*standby)(bool enter);
+ 
++    /* Blocking on-demand JPEG capture, only called on a worker task. NULL: no camera.
++     * On success return a malloc-owned JPEG in *jpeg and its length in *bytes. */
++    int (*camera_capture)(uint8_t **jpeg, size_t *bytes);
++
+     /* Commands only this board has; may be left out. */
+     const gadget_command_t *commands;
+     int command_count;
+--- a/arcs/gadget/gadget_core.c
++++ b/arcs/gadget/gadget_core.c
+@@ -24,6 +24,8 @@
+ #include "gadget_policy.h"
+ #include "gadget_play_url.h"
+ #include "impo_link.h"
++#include "mbedtls/base64.h"
++#include "impo_arcs_camera.h"
+ 
+ #define TAG "gadget"
+ #include "lisa_log.h"
+@@ -292,12 +294,46 @@
+ 
+ #define LIGHT_COUNT (gadget_board_get()->show_status != NULL ? 1 : 0)
+ 
++/* ---- camera.capture: official JPEG/base64 result contract ---- */
++static cJSON *cmd_camera_capture(const cJSON *params)
++{
++    (void)params;
++    uint8_t *jpeg=NULL;
++    size_t bytes=0,encoded=0;
++    int rc=gadget_board_get()->camera_capture(&jpeg,&bytes);
++    if (rc || !jpeg || !bytes || bytes>IMPO_CAMERA_JPEG_MAX) {
++        free(jpeg);
++        return gadget_command_error("camera capture failed or camera busy");
++    }
++    size_t cap=(bytes+2)/3*4+1;
++    char *data=malloc(cap);
++    if (!data || mbedtls_base64_encode((unsigned char *)data,cap,&encoded,jpeg,bytes)) {
++        free(jpeg); free(data);
++        return gadget_command_error("camera encoding allocation failed");
++    }
++    free(jpeg); data[encoded]='\0';
++    cJSON *payload=cJSON_CreateObject();
++    bool ok=payload && cJSON_AddStringToObject(payload,"format","jpeg-base64") &&
++        cJSON_AddStringToObject(payload,"data_base64",data) &&
++        cJSON_AddNumberToObject(payload,"width",IMPO_CAMERA_WIDTH) &&
++        cJSON_AddNumberToObject(payload,"height",IMPO_CAMERA_HEIGHT);
++    free(data);
++    if (!ok) { cJSON_Delete(payload); return gadget_command_error("camera result allocation failed"); }
++    return gadget_command_ok_payload(payload);
++}
++static const gadget_command_t s_camera_cmds[] = {
++    { "camera.capture", "Take one photo with the built-in camera. Returns a 320x240 JPEG image for you to inspect; takes up to 30 seconds. Do not claim to see anything until the returned image is opened.",
++      NULL, NULL, cmd_camera_capture },
++};
++#define CAMERA_COUNT (gadget_board_get()->camera_capture != NULL ? 1 : 0)
++
+ /* ---- registration ---- */
+ 
+ static void describe(cJSON *commands, const gadget_command_t *c)
+ {
+     cJSON *spec = cJSON_AddObjectToObject(commands, c->name);
+     cJSON_AddStringToObject(spec, "description", c->description);
++    if (!strcmp(c->name,"camera.capture")) cJSON_AddNumberToObject(spec,"timeout_ms",30000);
+     cJSON *req = c->required ? cJSON_Parse(c->required) : NULL;
+     cJSON *opt = c->optional ? cJSON_Parse(c->optional) : NULL;
+     if ((c->required && req == NULL) || (c->optional && opt == NULL)) {
+@@ -319,6 +355,7 @@
+         { s_standard, STANDARD_COUNT },
+         { s_speaker_cmds, SPEAKER_COUNT },
+         { s_light_cmds, LIGHT_COUNT },
++        { s_camera_cmds, CAMERA_COUNT },
+         { b->commands, b->command_count },
+     };
+     for (size_t g = 0; g < sizeof(groups) / sizeof(groups[0]); g++) {
+@@ -349,7 +386,7 @@
+     gadget_power_t power={0};
+     cJSON_AddBoolToObject(cap, "battery", b->read_power && b->read_power(&power)==0 && power.has_battery);
+     cJSON_AddBoolToObject(cap, "buttons", b->poll_buttons != NULL);
+-    cJSON_AddBoolToObject(cap, "camera", false);
++    cJSON_AddBoolToObject(cap, "camera", b->camera_capture != NULL);
+     cJSON *features = cJSON_AddArrayToObject(cap, "features");
+     if (b->features != NULL) {
+         char buf[128];
+@@ -381,6 +418,9 @@
+             c = &s_light_cmds[i];
+         }
+     }
++    for (int i = 0; i < CAMERA_COUNT && c == NULL; i++) {
++        if (strcmp(s_camera_cmds[i].name,name)==0) c=&s_camera_cmds[i];
++    }
+     for (int i = 0; i < b->command_count && c == NULL; i++) {
+         if (strcmp(b->commands[i].name, name) == 0) {
+             c = &b->commands[i];
+--- a/arcs/link/impo_link_glue.c
++++ b/arcs/link/impo_link_glue.c
+@@ -32,6 +32,8 @@
+ #include "vm_connect.h"
+ 
+ #include "gadget_core.h"
++#include "gadget_board.h"
++#include "link_camera.h"
+ #include "impo_link.h"
+ #include "impo_link_internal.h"
+ #include "link_creds.h"
+@@ -124,9 +126,9 @@
+ static cJSON *on_command(const char *command, cJSON *params, const char *request_id,
+                          noise_ctrl_session_generation_t session_generation)
+ {
+-    (void)request_id;
+-    (void)session_generation;
+     g.invokes++;
++    if (!strcmp(command,"camera.capture") && gadget_board_get()->camera_capture)
++        return link_camera_invoke(params,request_id,session_generation);
+     cJSON *r = gadget_run_command(command, params);
+     link_result_to_upstream(r);
+     return r;
+--- a/arcs/link/CMakeLists.txt
++++ b/arcs/link/CMakeLists.txt
+@@ -5,6 +5,7 @@
+     impo_link_streams.c
+     impo_glue_commands.c
+     link_glue_logic.c
++    link_camera.c
+     link_cmds.c
+     link_creds.c
+     link_identity.c
+--- /dev/null
++++ b/arcs/link/link_camera.h
+@@ -0,0 +1,5 @@
++#pragma once
++#include "cJSON.h"
++#include "noise_control.h"
++cJSON *link_camera_invoke(const cJSON *params,const char *request_id,
++                          noise_ctrl_session_generation_t generation);
+--- /dev/null
++++ b/arcs/link/link_camera.c
+@@ -0,0 +1,58 @@
++/* One camera job, owned parameters, and a generation-scoped async reply.
++ * Mirrors the shared ESP32 camera task; the Noise session never waits on DVP. */
++#include <stdlib.h>
++#include <string.h>
++#include "FreeRTOS.h"
++#include "task.h"
++#include "gadget_core.h"
++#include "link_glue_logic.h"
++#include "link_camera.h"
++typedef struct {
++    char request_id[64];
++    noise_ctrl_session_generation_t generation;
++    cJSON *params;
++} camera_job_t;
++static bool s_camera_job;
++static void camera_worker(void *arg)
++{
++    camera_job_t *job=arg;
++    cJSON *result=gadget_run_command("camera.capture",job->params);
++    cJSON_Delete(job->params);
++    link_result_to_upstream(result);
++    noise_ctrl_send_command_result(job->generation,job->request_id,result);
++    free(job);
++    taskENTER_CRITICAL(); s_camera_job=false; taskEXIT_CRITICAL();
++    vTaskDelete(NULL);
++}
++static cJSON *camera_error(const char *why)
++{
++    cJSON *r=gadget_command_error(why);
++    link_result_to_upstream(r);
++    return r;
++}
++cJSON *link_camera_invoke(const cJSON *params,const char *request_id,
++                          noise_ctrl_session_generation_t generation)
++{
++    if (!generation || !request_id || !*request_id || strlen(request_id)>=64)
++        return camera_error("invalid camera request identity");
++    taskENTER_CRITICAL();
++    bool busy=s_camera_job;
++    if (!busy) s_camera_job=true;
++    taskEXIT_CRITICAL();
++    if (busy) return camera_error("camera busy");
++    camera_job_t *job=calloc(1,sizeof(*job));
++    cJSON *async=cJSON_CreateObject();
++    if (!job || !async || !cJSON_AddBoolToObject(async,"_async",true)) goto failed;
++    job->generation=generation;
++    memcpy(job->request_id,request_id,strlen(request_id)+1);
++    job->params=params ? cJSON_Duplicate(params,true) : cJSON_CreateObject();
++    if (!job->params) goto failed;
++    if (xTaskCreate(camera_worker,"camera_capture",8192/sizeof(StackType_t),job,4,NULL)!=pdPASS)
++        goto failed;
++    return async;
++failed:
++    if (job) cJSON_Delete(job->params);
++    free(job); cJSON_Delete(async);
++    taskENTER_CRITICAL(); s_camera_job=false; taskEXIT_CRITICAL();
++    return camera_error("camera worker allocation failed");
++}
+--- a/arcs/gadget/gadget_shell.c
++++ b/arcs/gadget/gadget_shell.c
+@@ -30,6 +30,12 @@
+     cJSON *params = j->params[0] ? cJSON_Parse(j->params) : NULL;
+     cJSON *r = gadget_run_command(j->name, params);
+     cJSON_Delete(params);
++    cJSON *payload=cJSON_GetObjectItem(r,"payload");
++    cJSON *image=cJSON_GetObjectItem(payload,"data_base64");
++    if (!strcmp(j->name,"camera.capture") && cJSON_IsString(image)) {
++        LISA_LOGI(TAG,"camera.capture: JPEG base64 bytes=%u (image omitted from console)",(unsigned)strlen(image->valuestring));
++        cJSON_DeleteItemFromObject(payload,"data_base64");
++    }
+     char *s = cJSON_PrintUnformatted(r);
+     if(s_compact_output) {
+         LISA_LOGI(TAG,"%s: diagnostic compact output, ok=%d bytes=%u",j->name,

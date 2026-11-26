@@ -100,7 +100,7 @@ class ProductTests(unittest.TestCase):
         p=copy.deepcopy(self.default);p["instructions"]='He said "hello".\nSecond line.'
         self.assertIn(b'He said \\"hello\\".\\nSecond line.',generated_files(self.load(p))["impo_product_config.h"])
     def test_missing_glyph_is_explicit(self):
-        self.default["screen_title"]="喵"
+        self.default["screen_title"]="龦"
         with self.assertRaisesRegex(ValueError,"--font"):generated_files(self.load())
     def test_resource_descriptor_from_bytes(self):
         model=self.root/"mini.bin"; wrap=self.root/"mini.json"
@@ -135,9 +135,9 @@ class ProductTests(unittest.TestCase):
         self.assertFalse((self.root/"unrelated").exists())
     def test_known_legacy_overlay_migrates_without_git_history(self):
         repo=Path(__file__).resolve().parents[1]
-        name="arcs/boards/arcs_mini_yunbao/board.h"
+        name="arcs/boards/arcs_mini_yunbao/board.c"
         target=self.root/name;target.parent.mkdir(parents=True)
-        target.write_bytes((repo/"firmware/boards/arcs_mini_yunbao/board.h").read_bytes())
+        target.write_bytes((repo/"firmware/boards/arcs_mini_yunbao/board.c").read_bytes())
         install_managed(self.root,{name:b"new SDK overlay"})
         self.assertEqual(target.read_bytes(),b"new SDK overlay")
 

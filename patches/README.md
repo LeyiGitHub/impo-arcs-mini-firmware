@@ -15,6 +15,9 @@
 - `0012-listenai-sdk-018-ipc.patch`：按聆思生成的 SDK 版本头选择双核初始化路径。0.1.6 保留手动初始化；0.1.8 使用底层 SYS_INIT 已建立的通信并核验共享布局，避免应用重复清空共享环。`version` 同时打印实际编译使用的聆思 SDK 版本。各版本的唤醒控制命令继续由各自聆思 SDK 编译，不能混用头文件或归档。
 - `0013-listenai-sdk-018-psram-contract.patch`：为已核对的 0.1.8 AP 提供 CP 内存声明配置。SDK 组件将实际 PSRAM 起点和大小放在镜像 `0x180`；AP 先检查这些字段再启动 CP。构建后还会比较镜像字段和最终配置，缺失或不一致直接停止。0.1.6 使用独立的关闭配置，保持旧布局。
 - `0017-overlap-voice-upload-and-turn-metrics.patch`：独立上传任务、可选采集上传重叠、可配置端点、回合与订阅代次、ACK 前有界回复暂存、带上下文的 Link sink、取消检查和脱敏计时。缺省保持批量上传；实验开关及门槛见 [第一阶段说明](../docs/VOICE_LATENCY_IMPLEMENTATION.md)。
+- `0030-coalesce-websocket-writes.patch`：ARCS 以 4096 B PSRAM 暂存合并 WS 帧头和掩码 payload，保持接收/队列预算；共享整帧写期限，修正 32 位大帧长度编码。
+- `0031-batch-voice-tail-margin.patch`：仅 batch 的可选尾静音余量，默认关闭、正常端点才裁剪，记录采集/裁剪字节；与 overlap 互斥。
+- `0032-bound-tts-segments.patch`：所有 TTS 模式的单请求文字上限、完整缓冲与预取门槛互锁修正、请求提交/响应头计时。主机与构建证据、实机验收边界见[本轮方案](../docs/IMPO_CLOUD_OPTIMIZATION_20261126.md)。
 
 
 这些是本项目的社区修正，不代表上游已接受。TLS、WebSocket、Noise、配对、凭据刷新、设备身份和语音上传协议继续使用原 SDK。网络连接质量和实际听测见 `docs/VALIDATION.md`。

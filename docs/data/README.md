@@ -116,3 +116,79 @@ the later final-image verification; the matched image is identified in each JSON
   Two complete batch question/reply/TTS turns, no capture drops. No controlled
   end-to-end speed claim. A preceding console-listening guard refusal played no
   question and is retained privately as an invalid tool run.
+
+- `voice-full-chain-20261125-analysis.json`: derived interval analysis of the
+  two recovery turns, the separate final-image timeout, and the playback-only
+  matched comparison. No new device requests were sent for this analysis.
+  Device intervals end at driver acceptance; acoustic intervals use recorded
+  source/answer energy. Their difference is not calibrated speaker latency.
+  The timeout and recovered-network successes use different stimuli and are
+  not pooled. See `../VOICE_FULL_CHAIN_ANALYSIS_20261125.md` for definitions,
+  transport backpressure evidence and limits without cloud logs.
+
+- `reply-probe-20261125-explain-1.json`, `reply-probe-20261125-story-1.json`,
+  `reply-probe-20261125-short-1.json`: three separate observation-only runs on
+  one probe image. All observed appended text equals the final text. First
+  complete-sentence leads are 497/833/1090 ms, scheduling opportunities rather
+  than measured playback gains. A second planned explanation was refused by
+  the volume guard before stimulus playback. Mac volume differs across corpora.
+- `reply-stream-20261125-exploration-8.json`: eight interleaved full/incremental
+  questions on the earlier, aggressive streaming image. All completed; one
+  1308 ms underrun, two 15-second capture limits, only three acoustic samples
+  valid. Only three complete delta-probe records survived shell/log interleaving;
+  missing fields remain missing. No dependable end-to-end speedup is claimed.
+- `reply-stream-20261125-final-acceptance.json`: subsequent coalesced image,
+  initial host tests/builds, CP readback, preservation and online/configuration
+  snapshot before the user authorized voice testing. Zero questions were sent
+  during that snapshot. The later voice corpus is separate, below.
+- `reply-stream-20261125-coalesced-validation.json`: same coalesced image and
+  boot, four interleaved full/incremental pairs, 8/8 complete with zero underruns.
+  All four incremental turns issue two TTS requests, submitting 400–1095 ms
+  before final text. Five acoustic detections pass; a ±350 ms input tail check
+  leaves four clean samples and one complete pair (16.593/15.513 seconds).
+  First two attempts lack capture alignment, one fails noise detection, and
+  one has 1065 ms of extra input tail. All retained. A host snapshot binding
+  fix applies to the last six attempts. Full probe summaries remain incomplete
+  in all eight; the mode/segment rows are complete. No stable speedup is
+  established, and full remains the default. See
+  `../INCREMENTAL_REPLY_VALIDATION_20261125.md`.
+
+These three image stages are distinct. Do not pool earlier opportunities or
+queue behavior with final-image acoustic acceptance. See
+`../INCREMENTAL_REPLY_20261125.md` for thresholds, exact hashes and limitations.
+
+- `voice-optimization-review-20261125.json`: offline review of the same eight
+  final-image trials. One full-mode example sums exactly to 16.371 seconds of
+  device intervals; acoustic gap is independently 16.593 seconds. First-delta
+  waiting and final-text tail ranges are measured. Tail-trim byte savings and
+  a shorter continuous-turn wait are explicitly hypothetical, with no measured
+  wall-clock gain or firmware change. See `../VOICE_OPTIMIZATION_REVIEW_20261125.md`.
+
+- `cloud-streaming-input-audit-20261125.json`: current public official SDK/client
+  commits, 19 source files verified against their Git tree blob hashes, deployed
+  public gateway documentation, and interval ranges recomputed from the eight
+  existing coalesced-image trials. No verified callable realtime ASR contract
+  was found; production backend internals remain unknown. Proposed routes and
+  events are marked as proposals. No authenticated voice probe, SDK runtime
+  change, flash or new speedup measurement was performed. See
+  `../CLOUD_STREAMING_INPUT_AUDIT_20261125.md` for the cloud implementation and
+  pre-commit recognition acceptance requirements.
+
+- `cross-device-latency-attribution-20261125.json`: offline attribution for the
+  perceived Xiaozhou/Yunbao/Xiaoling difference. Recomputes all device intervals
+  and within-cycle differences from the existing twenty medium-text and eight
+  short-text playback trials. Earlier playback accounts for the demonstrated
+  policy gain; this is not a matched three-device voice comparison. Archived
+  device configurations and historical unpaired baselines are kept separate
+  from live state and from the later coalesced firmware image. See the final
+  section of `../VOICE_OPTIMIZATION_REVIEW_20261125.md`.
+
+## Source audit and implementation checks
+
+- `impo-cloud-optimization-20261126.json`: refreshed official commit/release
+  inventory, three local patches, host checks and separate ListenAI 0.1.6/0.1.8
+  candidate build metadata. This includes the original Yunbao 0.1.6 CP flash,
+  independent readback, basic live-cloud/playback/wake checks and one acoustic
+  trial per tail setting. It does not establish stable latency improvement,
+  human hearing, fleet acceptance or resolution of the existing heap faults. See
+  `../IMPO_CLOUD_OPTIMIZATION_20261126.md` for the implementation and rollout gates.

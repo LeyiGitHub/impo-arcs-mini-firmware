@@ -1,0 +1,442 @@
+--- a/arcs/gadget/gadget_core.c
++++ b/arcs/gadget/gadget_core.c
+@@ -160,10 +160,18 @@
+     }
+ }
+ 
++static bool notify_requested(const cJSON *params)
++{
++    return cJSON_IsTrue(cJSON_GetObjectItem(params,"notify_event"));
++}
+ static cJSON *cmd_beep(const cJSON *params)
+ {
+-    (void)params;
+-    return gadget_sound_beep() == 0 ? gadget_command_ok() : gadget_command_error("speaker busy");
++    uint32_t id=0;
++    if(gadget_sound_beep_tracked(&id)!=0)return gadget_command_error("speaker busy");
++    if(notify_requested(params))gadget_sound_receipt_watch(id);
++    cJSON *r=cJSON_CreateObject();cJSON_AddNumberToObject(r,"playback_id",id);
++    cJSON_AddStringToObject(r,"boot_id",gadget_sound_boot_id());
++    return gadget_command_ok_payload(r);
+ }
+ 
+ #define SAY_MAX 1000
+@@ -174,12 +182,16 @@
+     if (!cJSON_IsString(t) || t->valuestring[0] == '\0' || strlen(t->valuestring) > SAY_MAX) {
+         return gadget_command_error("text must be 1 to 1000 characters");
+     }
+-    if (gadget_speech_say(t->valuestring) != 0) {
++    uint32_t playback_id=0;
++    if (gadget_speech_say_tracked(t->valuestring,&playback_id) != 0) {
+         return gadget_command_error("not connected to Impo");
+     }
+     cJSON *r = cJSON_CreateObject();
+     cJSON_AddStringToObject(r, "status", "fetching");
+-    cJSON_AddStringToObject(r, "note", "the speech plays once Impo has made it, a few seconds from now");
++    cJSON_AddStringToObject(r, "note", "accepted; query speaker.playback_status with this boot_id and playback_id");
++    if(notify_requested(params))gadget_sound_receipt_watch(playback_id);
++    cJSON_AddNumberToObject(r,"playback_id",playback_id);
++    cJSON_AddStringToObject(r,"boot_id",gadget_sound_boot_id());
+     return gadget_command_ok_payload(r);
+ }
+ 
+@@ -187,12 +199,16 @@
+ {
+     const cJSON *u = cJSON_GetObjectItem(params, "url");
+     const char *why = "url is required";
+-    if (!cJSON_IsString(u) || gadget_play_url(u->valuestring, &why) != 0) {
++    uint32_t playback_id=0;
++    if (!cJSON_IsString(u) || gadget_play_url_tracked(u->valuestring, &why, &playback_id) != 0) {
+         return gadget_command_error(why);
+     }
+     cJSON *r = cJSON_CreateObject();
+     cJSON_AddStringToObject(r, "status", "fetching");
+-    cJSON_AddStringToObject(r, "note", "it plays once downloaded; speaker.status tells how it went");
++    cJSON_AddStringToObject(r, "note", "accepted; query speaker.playback_status with this boot_id and playback_id");
++    if(notify_requested(params))gadget_sound_receipt_watch(playback_id);
++    cJSON_AddNumberToObject(r,"playback_id",playback_id);
++    cJSON_AddStringToObject(r,"boot_id",gadget_sound_boot_id());
+     return gadget_command_ok_payload(r);
+ }
+ 
+@@ -209,7 +225,15 @@
+ 
+ static cJSON *cmd_speaker_stop(const cJSON *params)
+ {
+-    (void)params;
++    const cJSON *id=cJSON_GetObjectItem(params,"playback_id");
++    const cJSON *boot=cJSON_GetObjectItem(params,"boot_id");
++    impo_arcs_receipt_t receipt={0};
++    if(id) {
++        if(!cJSON_IsNumber(id) || !cJSON_IsString(boot) || strcmp(boot->valuestring,gadget_sound_boot_id()) ||
++           !gadget_sound_receipt_get((uint32_t)id->valuedouble,&receipt))
++            return gadget_command_error("unknown playback_id or boot_changed");
++        if(receipt.state>=IMPO_PLAYBACK_COMPLETED)return gadget_command_ok();
++    }
+     gadget_speech_cancel();
+     return gadget_command_ok();
+ }
+@@ -233,17 +257,18 @@
+ static const gadget_command_t s_speaker_cmds[] = {
+     { "speaker.say",
+       "Say something out loud on the gadget's speaker. Returns at once; the speech starts a few seconds "
+-      "later. Check speaker.status to know when it finished.",
++      "later. Query the returned boot_id/playback_id to confirm completion. notify_event defaults false; enable only for an active coordinator, never to acknowledge events.",
+       "{\"text\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":1000,\"description\":\"What to say, 1 to 1000 characters.\"}}",
+-      NULL, cmd_say },
++      "{\"notify_event\":{\"type\":\"boolean\"}}", cmd_say },
+     { "speaker.play_url",
+       "Play a sound file from the internet on the gadget's speaker: a public https MP3 (or 16-bit WAV) of at "
+-      "most 1.5 MB, about a minute. Returns at once; speaker.status tells how it went.",
+-      "{\"url\":{\"type\":\"string\",\"minLength\":9,\"maxLength\":1024,\"description\":\"https:// link to the MP3.\"}}", NULL, cmd_play_url },
+-    { "speaker.beep", "Play a short beep.", NULL, NULL, cmd_beep },
++      "most 1.5 MB, about a minute. Returns at once; speaker.playback_status verifies the returned boot_id/playback_id.",
++      "{\"url\":{\"type\":\"string\",\"minLength\":9,\"maxLength\":1024,\"description\":\"https:// link to the MP3.\"}}", "{\"notify_event\":{\"type\":\"boolean\"}}", cmd_play_url },
++    { "speaker.beep", "Play a short beep. notify_event defaults false.", NULL, "{\"notify_event\":{\"type\":\"boolean\"}}", cmd_beep },
+     { "speaker.set_volume", "Set the speaker volume. It is kept across restarts.",
+       "{\"percent\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100,\"description\":\"0 to 100.\"}}", NULL, cmd_set_volume },
+-    { "speaker.stop", "Stop whatever the speaker is playing.", NULL, NULL, cmd_speaker_stop },
++    { "speaker.stop", "Stop current playback. With playback_id and boot_id, stop only that still-active sound; a finished receipt never stops a newer sound.", NULL,
++      "{\"playback_id\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":4294967295},\"boot_id\":{\"type\":\"string\",\"maxLength\":16}}", cmd_speaker_stop },
+     { "speaker.status", "What the speaker is doing (idle, fetching, playing, failed) and its volume.",
+       NULL, NULL, cmd_speaker_status },
+ };
+@@ -298,7 +323,9 @@
+     };
+     for (size_t g = 0; g < sizeof(groups) / sizeof(groups[0]); g++) {
+         for (int i = 0; i < groups[g].count; i++) {
+-            if (cJSON_GetObjectItem(commands, groups[g].list[i].name) == NULL) {
++            const cJSON *existing=cJSON_GetObjectItem(commands,groups[g].list[i].name);
++            if (existing == NULL || cJSON_GetObjectItem(existing,"description")==NULL) {
++                cJSON_DeleteItemFromObject(commands,groups[g].list[i].name);
+                 describe(commands, &groups[g].list[i]);
+             }
+         }
+@@ -319,7 +346,8 @@
+     cJSON_AddBoolToObject(cap, "speaker", s_speaker);
+     cJSON_AddBoolToObject(cap, "microphone", s_voice);
+     cJSON_AddBoolToObject(cap, "push_to_talk", s_voice);
+-    cJSON_AddBoolToObject(cap, "battery", b->read_power != NULL);
++    gadget_power_t power={0};
++    cJSON_AddBoolToObject(cap, "battery", b->read_power && b->read_power(&power)==0 && power.has_battery);
+     cJSON_AddBoolToObject(cap, "buttons", b->poll_buttons != NULL);
+     cJSON_AddBoolToObject(cap, "camera", false);
+     cJSON *features = cJSON_AddArrayToObject(cap, "features");
+--- a/arcs/gadget/gadget_board.h
++++ b/arcs/gadget/gadget_board.h
+@@ -129,6 +129,8 @@
+      * (chassis.set_light); show_animation then hands it back to the status. NULL: no status light. */
+     void (*show_status)(gadget_status_t status);
+     void (*show_animation)(void);
++    /* Optional nonblocking application maintenance, every 100 ms. */
++    void (*poll_status)(void);
+ 
+     /* Called when the device goes to standby or wakes; park actuators, pause sensors. NULL: nothing. */
+     void (*standby)(bool enter);
+--- a/arcs/gadget/gadget_status.c
++++ b/arcs/gadget/gadget_status.c
+@@ -108,6 +108,7 @@
+             plat_wifi_watch_router();
+         }
+         n++;
++        if (b->poll_status != NULL) b->poll_status();
+         if (b->show_status != NULL) {
+             gadget_sound_state_t ss = gadget_sound_state();
+             gadget_status_in_t in = {
+--- a/arcs/gadget/gadget_sound.c
++++ b/arcs/gadget/gadget_sound.c
+@@ -47,6 +47,8 @@
+ static size_t s_prefill;
+ static uint64_t s_rebuffer_at;
+ static impo_arcs_playback_snapshot_t s_play;
++static impo_arcs_receipts_t *s_receipts;
++static char s_boot_id[17];
+ static int s_volume = DEFAULT_VOLUME;
+ static int32_t s_gain_q15;
+ static void (*s_set_amp)(bool on);
+@@ -84,11 +86,13 @@
+ 
+ /* ---- producer side ---- */
+ 
+-static uint32_t begin_sound(const char *what, bool buffered, bool adaptive, uint32_t prefill)
++static uint32_t begin_sound(const char *what, bool buffered, bool adaptive, uint32_t prefill, bool idle_only)
+ {
+     xSemaphoreTake(s_lock, portMAX_DELAY);
++    if(idle_only && s_state!=GADGET_SOUND_IDLE && s_state!=GADGET_SOUND_FAILED) { xSemaphoreGive(s_lock); return 0; }
+     s_head = s_tail = s_count = 0;
+-    s_gen++;
++    if(!++s_gen)++s_gen;
++    impo_arcs_receipts_begin(s_receipts,s_gen,what,plat_uptime_ms());
+     s_buffering = buffered;
+     s_adaptive = adaptive;
+     s_started = false;
+@@ -106,10 +110,48 @@
+               (unsigned)adaptive, (unsigned)s_play.prefill_ms);
+     return gen;
+ }
+-uint32_t gadget_sound_begin(const char *what) { return begin_sound(what, false, false, 0); }
+-uint32_t gadget_sound_begin_buffered(const char *what) { return begin_sound(what, true, false, 0); }
++uint32_t gadget_sound_begin(const char *what) { return begin_sound(what, false, false, 0, false); }
++uint32_t gadget_sound_begin_buffered(const char *what) { return begin_sound(what, true, false, 0, false); }
+ uint32_t gadget_sound_begin_adaptive(const char *what, uint32_t prefill_ms)
+-{ return begin_sound(what, true, true, prefill_ms); }
++{ return begin_sound(what, true, true, prefill_ms, false); }
++uint32_t gadget_sound_begin_if_idle(const char *what)
++{ return s_lock ? begin_sound(what,false,false,0,true) : 0; }
++const char *gadget_sound_boot_id(void) { return s_boot_id; }
++bool gadget_sound_receipt_get(uint32_t id, impo_arcs_receipt_t *out)
++{
++    if(!s_lock || !s_receipts)return false;
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    bool found=impo_arcs_receipts_get(s_receipts,id,out);
++    xSemaphoreGive(s_lock);return found;
++}
++void gadget_sound_receipt_watch(uint32_t id)
++{
++    if(!s_lock)return;
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    for(unsigned i=0;i<IMPO_RECEIPT_HISTORY;i++) {
++        impo_arcs_receipt_t *r=&s_receipts->entries[i];
++        if(r->playback_id==id){r->notify=true;if(r->state>=IMPO_PLAYBACK_COMPLETED)r->pending_event=true;}
++    }
++    xSemaphoreGive(s_lock);
++}
++bool gadget_sound_receipt_event(impo_arcs_receipt_t *out)
++{
++    if(!s_lock || !out)return false;
++    bool found=false;xSemaphoreTake(s_lock,portMAX_DELAY);
++    for(unsigned n=0;n<IMPO_RECEIPT_HISTORY;n++) {
++        unsigned i=(s_receipts->next+n)%IMPO_RECEIPT_HISTORY;
++        if(s_receipts->entries[i].pending_event){*out=s_receipts->entries[i];found=true;break;}
++    }
++    xSemaphoreGive(s_lock);return found;
++}
++void gadget_sound_receipt_event_ack(uint32_t id)
++{
++    if(!s_lock)return;
++    xSemaphoreTake(s_lock,portMAX_DELAY);
++    for(unsigned i=0;i<IMPO_RECEIPT_HISTORY;i++)
++        if(s_receipts->entries[i].playback_id==id)s_receipts->entries[i].pending_event=false;
++    xSemaphoreGive(s_lock);
++}
+ void gadget_sound_playback_snapshot(impo_arcs_playback_snapshot_t *out)
+ {
+     if (!out || !s_lock) return;
+@@ -164,6 +206,7 @@
+         s_head=s_tail=s_count=0;s_buffering=false;
+         snprintf(s_error,sizeof(s_error),"%s",error);
+         s_state=GADGET_SOUND_FAILED;
++        impo_arcs_receipts_update(s_receipts,gen,IMPO_PLAYBACK_FAILED,error,plat_uptime_ms());
+     }
+     s_input_done=true;
+     xSemaphoreGive(s_lock);
+@@ -180,6 +223,7 @@
+ void gadget_sound_stop(void)
+ {
+     xSemaphoreTake(s_lock,portMAX_DELAY);
++    impo_arcs_receipts_update(s_receipts,s_gen,IMPO_PLAYBACK_INTERRUPTED,"stopped",plat_uptime_ms());
+     s_gen++;s_buffering=false;s_head=s_tail=s_count=0;s_input_done=true;s_state=GADGET_SOUND_IDLE;
+     xSemaphoreGive(s_lock);
+ }
+@@ -213,7 +257,7 @@
+ 
+ /* ---- beep: a short rising chirp, 620 -> 1180 Hz over 90 ms (the impo-gadget-sdk sound) ---- */
+ 
+-static int chirp(double f0, double f1)
++static int chirp(double f0, double f1, uint32_t *playback_id)
+ {
+     enum { N = RATE * 90 / 1000 };
+     static int16_t *pcm;
+@@ -230,6 +274,7 @@
+         pcm[i] = (int16_t)(7000 * env * v);
+     }
+     uint32_t gen = gadget_sound_begin("beep");
++    if(playback_id)*playback_id=gen;
+     int r = gadget_sound_write(gen, pcm, N, 500);
+     gadget_sound_end(gen, NULL);
+     return r;
+@@ -237,12 +282,14 @@
+ 
+ int gadget_sound_beep(void)
+ {
+-    return chirp(620, 1180);
+-}
++    return chirp(620, 1180, NULL);
++}
++
++int gadget_sound_beep_tracked(uint32_t *playback_id) { return chirp(620,1180,playback_id); }
+ 
+ int gadget_sound_beep_down(void)
+ {
+-    return chirp(1180, 620);
++    return chirp(1180, 620, NULL);
+ }
+ 
+ /* ---- output task ---- */
+@@ -298,7 +345,13 @@
+                 LISA_LOGI(TAG, "ended; last 10 blocks rms/peak:%s", line);
+             }
+             xSemaphoreTake(s_lock,portMAX_DELAY);
+-            if (gen==s_gen && s_input_done && !s_count && s_state == GADGET_SOUND_PLAYING) s_state=GADGET_SOUND_IDLE;
++            /* ARCS has twelve 16 ms DMA buffers. A 200 ms guard covers their
++             * maximum queued tail; this is a software drain, not acoustic proof. */
++            if(gen==s_gen && s_input_done && !s_count && s_state==GADGET_SOUND_PLAYING &&
++               plat_uptime_ms()-s_play.last_write_ms>=200) {
++                s_state=GADGET_SOUND_IDLE;
++                impo_arcs_receipts_update(s_receipts,gen,IMPO_PLAYBACK_COMPLETED,NULL,plat_uptime_ms());
++            }
+             xSemaphoreGive(s_lock);
+             if (amp && quiet_ms >= AMP_OFF_MS) {
+                 LISA_LOGI(TAG, "amp off");
+@@ -338,6 +391,12 @@
+             s_started=true;s_play.played_samples+=(uint32_t)n;
+             if (!s_play.first_write_ms) s_play.first_write_ms=plat_uptime_ms();
+             s_play.last_write_ms=plat_uptime_ms();
++            impo_arcs_receipts_update(s_receipts,gen,IMPO_PLAYBACK_PLAYING,NULL,plat_uptime_ms());
++        }
++        if(gen==s_gen && result<0) {
++            s_head=s_tail=s_count=0;s_input_done=true;s_buffering=false;s_state=GADGET_SOUND_FAILED;
++            strcpy(s_error,"audio output failed");
++            impo_arcs_receipts_update(s_receipts,gen,IMPO_PLAYBACK_FAILED,s_error,plat_uptime_ms());
+         }
+         xSemaphoreGive(s_lock);
+         if (gen == s_gen && gen != written_gen) {
+@@ -357,9 +416,13 @@
+         v = DEFAULT_VOLUME;
+     }
+     apply_volume(v);
++    s_receipts=calloc(1,sizeof(*s_receipts)>1024?sizeof(*s_receipts):1025);
++    uint32_t nonce[2]={0};
++    if(plat_random(nonce,sizeof(nonce))!=0)return -1;
++    snprintf(s_boot_id,sizeof(s_boot_id),"%08x%08x",(unsigned)nonce[0],(unsigned)nonce[1]);
+     s_ring = malloc(RING_SAMPLES * sizeof(int16_t));
+     s_lock = xSemaphoreCreateMutex();
+-    if (s_ring == NULL || s_lock == NULL) {
++    if (s_ring == NULL || s_lock == NULL || s_receipts == NULL) {
+         LISA_LOGE(TAG, "no memory for the sound ring");
+         return -1;
+     }
+--- a/arcs/gadget/gadget_sound.h
++++ b/arcs/gadget/gadget_sound.h
+@@ -5,6 +5,7 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ #include "impo_arcs_playback.h"
++#include "impo_arcs_receipt.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -25,6 +26,12 @@
+ 
+ /* Starts a new sound, dropping the current one. Returns its generation for write/end. */
+ uint32_t gadget_sound_begin(const char *what);
++uint32_t gadget_sound_begin_if_idle(const char *what);
++const char *gadget_sound_boot_id(void);
++bool gadget_sound_receipt_get(uint32_t id, impo_arcs_receipt_t *out);
++bool gadget_sound_receipt_event(impo_arcs_receipt_t *out);
++void gadget_sound_receipt_event_ack(uint32_t id);
++void gadget_sound_receipt_watch(uint32_t id);
+ /* Buffer network speech until complete, or the existing ring is nearly full. */
+ uint32_t gadget_sound_begin_buffered(const char *what);
+ uint32_t gadget_sound_begin_adaptive(const char *what, uint32_t prefill_ms);
+@@ -37,6 +44,7 @@
+ void gadget_sound_set_decoding(uint32_t gen);   /* play_url: downloaded, decoding before the first samples */
+ size_t gadget_sound_room(void);   /* free samples in the ring */
+ 
++int gadget_sound_beep_tracked(uint32_t *playback_id);
+ int gadget_sound_beep(void);        /* rising: start */
+ int gadget_sound_beep_down(void);   /* falling: done */
+ int gadget_sound_volume(void);
+--- a/arcs/gadget/gadget_speech.c
++++ b/arcs/gadget/gadget_speech.c
+@@ -234,7 +234,7 @@
+     if(s_lock)xSemaphoreGive(s_lock);
+     return idle?0:-1;
+ }
+-static int speech_begin(const char *text,bool streaming) {
++static int speech_begin(const char *text,bool streaming,uint32_t *playback_id) {
+     if(!s_lock||!text||!*text||strlen(text)>TEXT_MAX)return -1;
+     char *copy=malloc(strlen(text)+1);if(!copy)return -1;strcpy(copy,text);
+     xSemaphoreTake(s_lock,portMAX_DELAY);
+@@ -252,10 +252,12 @@
+     memset(&s_stats,0,sizeof(s_stats));s_stats.active=s_active=true;s_stats.request_ms=plat_uptime_ms();
+     s_sound_gen=s_config.adaptive?gadget_sound_begin_adaptive("speech",s_learned_prefill):gadget_sound_begin_buffered("speech");
+     s_stats.generation=s_sound_gen;
++    if(playback_id)*playback_id=s_sound_gen;
+     xSemaphoreGive(s_lock);return 0;
+ }
+-int gadget_speech_say(const char *text) { return speech_begin(text,false); }
+-int gadget_speech_stream_begin(const char *text) { return speech_begin(text,true); }
++int gadget_speech_say(const char *text) { return speech_begin(text,false,NULL); }
++int gadget_speech_say_tracked(const char *text,uint32_t *playback_id) { return speech_begin(text,false,playback_id); }
++int gadget_speech_stream_begin(const char *text) { return speech_begin(text,true,NULL); }
+ int gadget_speech_stream_append(const char *text) {
+     if(!s_lock||!text||!*text)return -1;
+     size_t n=strlen(text);if(n>=TEXT_MAX)return -1;
+--- a/arcs/gadget/gadget_speech.h
++++ b/arcs/gadget/gadget_speech.h
+@@ -9,6 +9,7 @@
+ void gadget_speech_snapshot(impo_arcs_playback_snapshot_t *out);
+ bool gadget_speech_started(void);
+ int gadget_speech_say(const char *text);
++int gadget_speech_say_tracked(const char *text, uint32_t *playback_id);
+ int gadget_speech_stream_begin(const char *first);
+ int gadget_speech_stream_append(const char *text);
+ int gadget_speech_stream_finish(void);
+--- a/arcs/gadget/gadget_play_url.c
++++ b/arcs/gadget/gadget_play_url.c
+@@ -149,7 +149,7 @@
+     vTaskDelete(NULL);
+ }
+ 
+-int gadget_play_url(const char *url, const char **why)
++int gadget_play_url_tracked(const char *url, const char **why, uint32_t *playback_id)
+ {
+     if (url == NULL || strncmp(url, "https://", 8) != 0 || strlen(url) >= URL_MAX) {
+         *why = "url must be https:// and at most 511 characters";
+@@ -163,6 +163,7 @@
+     strcpy(s_url, url);
+     strcpy(s_last_url, url);
+     s_gen = gadget_sound_begin("play_url");
++    if(playback_id)*playback_id=s_gen;
+     if (xTaskCreate(play_task, "gadget_play", 8192 / sizeof(StackType_t), NULL, 3, NULL) != pdPASS) {
+         s_busy = false;
+         gadget_sound_end(s_gen, "out of memory");
+@@ -172,6 +173,8 @@
+     return 0;
+ }
+ 
++int gadget_play_url(const char *url,const char **why) { return gadget_play_url_tracked(url,why,NULL); }
++
+ const char *gadget_play_url_last(void)
+ {
+     return s_last_url;
+--- a/arcs/gadget/gadget_play_url.h
++++ b/arcs/gadget/gadget_play_url.h
+@@ -1,5 +1,6 @@
+ /* speaker.play_url: a public https MP3 or WAV, at most 1.5 MB, played through gadget_sound. */
+ #pragma once
++#include <stdint.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -7,6 +8,7 @@
+ 
+ /* Starts downloading and returns at once; -1 with *why when refused. */
+ int gadget_play_url(const char *url, const char **why);
++int gadget_play_url_tracked(const char *url, const char **why, uint32_t *playback_id);
+ const char *gadget_play_url_last(void);   /* "" before the first */
+ 
+ #ifdef __cplusplus
+--- a/arcs/platform/arcs/plat_init.c
++++ b/arcs/platform/arcs/plat_init.c
+@@ -19,7 +19,8 @@
+ #include "lisa_time.h"
+ 
+ #ifndef GADGET_FW_VERSION
+-#define GADGET_FW_VERSION "0.1.0"
++#include "impo_arcs_mini.h"
++#define GADGET_FW_VERSION IMPO_ARCS_MINI_SDK_VERSION
+ #endif
+ 
+ #define TAG "plat"

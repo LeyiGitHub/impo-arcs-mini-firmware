@@ -24,6 +24,8 @@ static size_t raw_n;
 static reply_t replies[4];
 static unsigned reply_head, reply_count;
 static unsigned spoken;
+static bool finish_stream_in_delay;
+static char streamed_text[512];
 static _Atomic uint64_t playing_until;
 static uint32_t request_epoch;
 
@@ -32,6 +34,11 @@ uint64_t plat_uptime_ms(void) { return (UINT64_C(1)<<32) + (now_ns()-origin)*SCA
 static void delay(unsigned ms) { struct timespec ts={0,(long)ms*1000000/SCALE};nanosleep(&ts,NULL); }
 unsigned uxTaskGetStackHighWaterMark(TaskHandle_t t) { (void)t;return 512; }
 void vTaskDelay(unsigned ms) {
+ if(finish_stream_in_delay && spoken && s_reply_incremental) {
+  finish_stream_in_delay=false;
+  delay(20);
+  on_line(NULL,"{\"type\":\"event\",\"event\":\"delta.message_done\",\"payload\":{\"message_id\":\"stream-a\",\"parent_message_id\":\"note-1\",\"display_text\":\"这是可以播放的第一句话，用来验证一边生成一边播放是否连续。还有最后一句话。\"}}");
+ }
  if(interrupt_reply && s_state==GADGET_VOICE_SPEAKING && plat_uptime_ms()<playing_until) {
   interrupt_reply=false;assert(gadget_voice_interrupt());
  }
@@ -95,6 +102,9 @@ gadget_sound_state_t gadget_sound_state(void) { return plat_uptime_ms()<playing_
 const char *gadget_sound_error(void) { return ""; }
 bool gadget_speech_started(void) { return false; }
 int gadget_speech_say(const char *text) { assert(text && *text);spoken++;playing_until=plat_uptime_ms()+200;return 0; }
+int gadget_speech_stream_begin(const char *text){strcpy(streamed_text,text);return gadget_speech_say(text);}
+int gadget_speech_stream_append(const char *text){strcat(streamed_text,text);playing_until=plat_uptime_ms()+200;return 0;}
+int gadget_speech_stream_finish(void){return 0;}
 impo_link_state_t impo_link_state(void) { return IMPO_LINK_ONLINE; }
 int impo_link_stream_open(const char *path,const char *type,const char *accept,const void *body,size_t n,bool more,const impo_link_stream_sink_t *sink)
 { (void)path;(void)type;(void)accept;(void)body;(void)n;(void)more;(void)sink;return -1; }
@@ -138,6 +148,8 @@ static void reset(bool overlap) {
  slow_ms=0;fail_send=touch_frame=0;speech=true;long_speech=false;interrupt_reply=false;no_frames=false;auto_ack=true;invalid_ack=early_reply=false;
  s_touch=s_stop=s_interrupt=s_session=s_followup=s_wake=false;s_note_failed=false;
  s_config=(impo_arcs_voice_config_t){overlap,1200};gadget_chat_init(&s_chat);
+ s_tail_keep_ms=0;
+ s_reply_incremental=false;finish_stream_in_delay=false;
 }
 static uint32_t u32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static void verify_pcm(bool overlap) {
@@ -188,6 +200,27 @@ int main(void) {
  assert(gadget_voice_configure(&(impo_arcs_voice_config_t){false,1200})==-1);
  end_turn(true);assert(!gadget_voice_configure(&(impo_arcs_voice_config_t){false,1200}));
  assert(gadget_voice_configure(&(impo_arcs_voice_config_t){false,1})==-1);
+ /* Same endpoint/captured frames; the submitted WAV is an exact prefix with
+  * 300 ms of tail retained, its own lengths, and exactly one finalization. */
+ reset(false);assert(!gadget_voice_tail_configure(300));assert(listen(NULL));verify_pcm(false);
+ assert(s_stats.tail_keep_ms==300 && s_stats.trimmed_pcm_bytes==900*32);
+ assert(s_stats.captured_pcm_bytes==s_stats.pcm_bytes+s_stats.trimmed_pcm_bytes);
+ assert(s_stats.queued_bytes==44+s_stats.pcm_bytes);
+ assert(gadget_voice_tail_configure(0)==-1);end_turn(true);
+ assert(gadget_voice_configure(&(impo_arcs_voice_config_t){true,1200})==-1);
+ assert(gadget_voice_tail_configure(199)==-1 && gadget_voice_tail_configure(1001)==-1);
+ assert(!gadget_voice_tail_configure(0));
+ assert(!gadget_voice_configure(&(impo_arcs_voice_config_t){true,1200}));
+ assert(gadget_voice_tail_configure(300)==-1);
+ reset(false);s_tail_keep_ms=300;long_speech=true;assert(listen(NULL));verify_pcm(false);
+ assert(s_stats.pcm_bytes==480000 && !s_stats.trimmed_pcm_bytes); /* no silence endpoint */
+ reset(false);s_reply_incremental=true;assert(listen(NULL));
+ on_line(NULL,"{\"type\":\"event\",\"event\":\"delta.text_append\",\"payload\":{\"message_id\":\"stream-a\",\"parent_message_id\":\"note-1\",\"text\":\"这是可以播放的第一句话，用来验证一边生成一边播放是否连续。\"}}");
+ finish_stream_in_delay=true;assert(await_replies());
+ assert(!strcmp(streamed_text,"这是可以播放的第一句话，用来验证一边生成一边播放是否连续。还有最后一句话。"));
+ assert(spoken==1 && s_stats.reply_segments==2 && !s_stats.reply_mismatches && !reply_count);
+ assert(s_stats.stage_ms[IMPO_VOICE_TTS_REQUEST]<s_stats.stage_ms[IMPO_VOICE_MESSAGE_DONE]);
+ end_turn(true);assert(!gadget_voice_reply_configure(false));
  puts("Voice pipeline: concurrent capture/upload, 6s/15s slow queue, lossless Base64/WAV, silence, cancel, ACK reordering, stale epochs, reconnect, queue exhaustion and endpoint passed");
  return 0;
 }

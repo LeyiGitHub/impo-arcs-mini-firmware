@@ -13,16 +13,11 @@
 #define MPU6050_I2C_DEVICE_NAME SENSOR_I2C_DEVICE_NAME
 #define PN532_I2C_DEVICE_NAME   SENSOR_I2C_DEVICE_NAME
 
-#define BOARD_ARCS_MINI_V2_1_HAS_CAMERA 0
-#define BOARD_ARCS_MINI_V2_1_HAS_DVP    0
+#define BOARD_ARCS_MINI_V2_1_HAS_CAMERA 1
+#define BOARD_ARCS_MINI_V2_1_HAS_DVP    1
 
-/*
- * Camera sources are still compiled by apps/arcs-mini, even when their
- * devices are disabled by overlay.conf. Keep the legacy pin constants so
- * those translation units compile, but lisa_dvp_pinmux() is intentionally
- * empty and none of these pads is switched to DVP. In particular, PA13 is
- * physically the second TTP223 output on this board revision.
- */
+/* Standard Mini camera wiring. These aliases are also used by SDK services.
+ * This board does not use the V2.1 robot dog's PA13 touch-sensor wiring. */
 #ifndef CAM_HSYNC_PIN
 #define CAM_HSYNC_PIN 10
 #endif

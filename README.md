@@ -2,11 +2,11 @@
 
 基于 [Impo 官方 Gadget SDK](https://github.com/impoai/impo-gadget-sdk) 的可复用 Arcs-Mini2 设备 SDK，包含公共 C/C++ 接口、产品配置、应用扩展和云宝参考固件。设备使用官方 BLE 配对、Noise 链路、设备命令和语音回合，默认启用官方国内路由：大陆网络自动选择 `gadget.itoy.cn:9443`，TLS 和 HTTP Host 使用官方网关名 `gw.itoy.cn`；其他地区或国内线路连续失败时按官方策略直连。不依赖原来的 Mac / ACK / LifeLike 桥接服务。详见 [国内连接](docs/CHINA_ROUTE.md)。
 
-这是独立的社区适配仓库。SDK 版本 **0.1.0**，面向与当前云宝相同接线的设备；不同产品通过 JSON 配置名称、平台产品 ID、连续对话和唤醒资源。接入、示例及资源约束见 [SDK 使用指南](docs/SDK.md)。官方 SDK 按 `dependencies.lock.json` 固定到 `ad0e6b7527501248631569516483e4845e2e5665`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话、选网优先级及国内路由兼容层；共享链路、路由和语音代码不另写一份。
+这是独立的社区适配仓库。SDK 版本 **0.2.1**，面向与当前云宝相同接线的设备；不同产品通过 JSON 配置名称、平台产品 ID、连续对话和唤醒资源。接入、示例及资源约束见 [SDK 使用指南](docs/SDK.md)。官方 SDK 按 `dependencies.lock.json` 固定到 `ad0e6b7527501248631569516483e4845e2e5665`，板级适配位于 `firmware/boards/arcs_mini_yunbao`。`patches/` 记录 ARCS 音频缓冲、TLS 读取调度、TCP 小包发送、录音后上传、连续对话、选网优先级及国内路由兼容层；共享链路、路由和语音代码不另写一份。
 
 ## 版本与兼容性
 
-**本项目共用一套 SDK 源码和公共接口，按聆思底层 SDK 版本分别编译。** `0.1.6` / `0.1.8` 是聆思官方 ARCS SDK 的版本；本项目 SDK 的版本是 `0.1.0`，Impo 官方依赖用提交号单独固定。
+**本项目共用一套 SDK 源码和公共接口，按聆思底层 SDK 版本分别编译。** `0.1.6` / `0.1.8` 是聆思官方 ARCS SDK 的版本；本项目 SDK 的版本是 `0.2.3`，Impo 官方依赖用提交号单独固定。
 
 | 聆思底层版本 | 目标设备保留的 AP | 构建参数 | 产物目录 |
 | --- | --- | --- | --- |
@@ -34,6 +34,11 @@ python3 tools/build.py --docker \
 
 ## 当前状态
 
+- 2026-11-26 云端接入优化：落实 WS 写入合并、可选 batch 尾静音裁剪、TTS 限长及分段缓冲互锁修正。主机回归与三种交叉构建通过；原版云宝 0.1.6 已 CP 刷写并独立读回，基本云端问答、长文本、显式打断和物理唤醒检查通过。裁剪默认关闭，稳定提速及人工听感尚未确认，见[方案与验证](docs/IMPO_CLOUD_OPTIMIZATION_20261126.md)。
+- 2026-11-26：0.2.3 接入内置摄像头 `camera.capture`，按需回传 320×240 JPEG；默认应用共 21 条命令，详见 [摄像头接口](docs/CAMERA.md)。
+- 2026-11-25：0.2.2 新增 `display.show_image`，后台下载静态 HTTPS JPEG/PNG（256 KiB、512×512 以内），等比例居中显示，具备失败状态、过期恢复和取消后拒收旧结果。默认应用共 20 条命令。
+- 2026-11-25：默认应用增加到 19 条命令、5 类可选事件及 5 个产品场景，包括精确播放回执、表情/文字卡片、本地倒计时、合成音效和临时答题按键。0.2.1 的播放/计时事件默认关闭，显式 `notify_event: true` 才发送，避免普通朗读形成事件应答循环。构建、设备写入、云端清单绑定及人工验收的当前边界见 [能力说明与验收](docs/COMPANION_CAPABILITIES.md)。
+
 - 2026-11-24 语音优化：公共 SDK 已支持独立采集/上传、回合关联、取消及阶段查询。
   同一 Mini2 镜像中 batch/overlap 各30次固定短问，成功声学样本 P50 为
   13.878 / 11.819 秒，约减少14.8%；失败数分别0/30和1/30，未重试失败问题。
@@ -50,7 +55,7 @@ python3 tools/build.py --docker \
 - 2026-11-23 已通过一次实物问答：用户短按后问“二加三等于几”，Impo 回复“五”，用户确认听到完整回答；该回合约 24 秒后开始播放。当前仍存在连接停顿与重连，不能据此宣称稳定性通过。
 - 已接入原机“你好云宝”本地唤醒和连续对话，实机结果见验收记录；短按开始/退出，静音约 5 秒退出，长按沿用 SDK 关机策略。详见 [唤醒与连续对话](docs/WAKE_DIALOGUE.md)。
 - ST7789P3 单屏中文状态页已刷入实机，用户确认“云宝”、眼睛表情及中文状态显示正常，方向和文字正确。同一屏幕版固件在原网络上因 TLS 上传超时重连，切到手机热点后通过一次完整问答与人工听测，短按释放到回答开始约 38 秒。网络环境会影响结果，SDK 仍有慢写，长期稳定性未通过，详见 [屏幕适配](docs/SCREEN.md) 和验收记录。
-- 不注册机器狗的电机、步态、IMU、触摸或摄像头能力；独立状态灯和电池曲线尚未适配。
+- 不注册机器狗的电机、步态、IMU 或触摸能力；独立状态灯和电池曲线尚未适配。
 - 主机测试、完整编译、实机刷写、Impo 配对和真实语音验收分别记录在 [验收状态](docs/VALIDATION.md)。代码存在不表示实机通过。
 
 ## 获取和构建
@@ -76,7 +81,7 @@ macOS 已安装官方 RISC-V 工具链、cmake、ninja 时，可省去 `--docker
 
 屏幕“待机”跟随 SDK 客户端在线状态。通过单个 ADB 交互 shell 读取 `pair`、`link`、`gadget device.health`：`paired=1` 表示已保存配对，`state=online` 表示已建立 Impo 链路；注册成功还应检查 `link.register acked`，语音需单独听测。`screen` 可查看显示写帧状态，`screen test` 可测试颜色；驱动回执不能代替实物验收。不要把这些命令的原始输出发布到公开仓库。
 
-基础命令直接来自官方 SDK：`device.health`、`device.set_name`、`speaker.say`、`speaker.play_url`、`speaker.set_volume`、`speaker.beep`、`speaker.stop`、`speaker.status`、`display.show_animation`。`python3 tools/gen_manifest.py` 可生成与实际命令一致的产品清单；不借用机器狗产品 ID。
+基础命令直接来自官方 SDK：`device.health`、`device.set_name`、`speaker.say`、`speaker.play_url`、`speaker.set_volume`、`speaker.beep`、`speaker.stop`、`speaker.status`、`display.show_animation`。默认 companion 还提供 10 条扩展命令，见 [能力说明](docs/COMPANION_CAPABILITIES.md)。`python3 tools/gen_manifest.py` 可生成与实际命令一致的产品清单；不借用机器狗产品 ID。
 
 ## 测试
 

@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: MIT */
-#include "impo_arcs_mini.h"
+#include "impo_arcs_companion.h"
 const impo_arcs_mini_application_t *impo_arcs_mini_application(void)
 {
-    static const impo_arcs_mini_application_t app = {0};
-    return &app;
+    return impo_arcs_companion_application();
 }

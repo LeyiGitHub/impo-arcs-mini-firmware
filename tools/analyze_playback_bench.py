@@ -26,8 +26,10 @@ def export(root):
     allowed='index mode cycle ok generation failed cancelled adaptive sentence played_samples queued_samples underruns underrun_ms prefill_ms ingress_high_water ingress_overflows received_bytes worker_stack_free segments_decoded segments_requested tts_requests'.split()
     for row in rows:
         r={k:row[k] for k in allowed if k in row};r['bench_error']=bool(row.get('error') or row.get('record_error'))
-        for key in ['first_body_ms','first_pcm_ms','first_write_ms','last_write_ms']:
+        for key in ['first_submit_ms','first_status_ms','first_body_ms','first_pcm_ms','first_write_ms','last_write_ms']:
             if row.get(key) and row.get('request_ms'):r[key.replace('_ms','_from_request_ms')]=row[key]-row['request_ms']
+        if row.get('first_body_ms') and row.get('first_status_ms'):
+            r['status_to_first_body_ms']=row['first_body_ms']-row['first_status_ms']
         try:r['acoustic']=acoustic(row,root/f"trial-{row['index']:03d}-{row['mode']}.wav")
         except Exception:r['acoustic']={'valid':False}
         public.append(r)

@@ -16,6 +16,7 @@ class ExportTests(unittest.TestCase):
                         "private": secret, "device_components_p50_ms": {"raw_log": secret}}},
                     "paired": {"private": secret}, "trials": [
                         {"index": 1, "mode": "overlap", "ok": False, "failed": 1,
+                         "tail_keep_ms": 300, "captured_pcm_bytes": 76800, "trimmed_pcm_bytes": 28800,
                          "error": secret, "boot": secret, "raw_log": secret,
                          "reply_diagnostics": {"bytes": 77, "raw_log": secret},
                          "acoustic": {"acoustic_valid": False, "error": secret}}]}
@@ -32,6 +33,8 @@ class ExportTests(unittest.TestCase):
         self.assertTrue(result["trials"][0]["bench_error"])
         self.assertEqual(result["summary"]["overlap:1200"]["voice_failed"], 1)
         self.assertEqual(result["trials"][0]["reply_diagnostics"], {"bytes": 77})
+        self.assertEqual(result["trials"][0]["tail_keep_ms"],300)
+        self.assertEqual(result["trials"][0]["trimmed_pcm_bytes"],28800)
 
 
 if __name__ == "__main__":

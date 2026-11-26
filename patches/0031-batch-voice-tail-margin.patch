@@ -1,0 +1,84 @@
+--- a/arcs/gadget/gadget_voice.c
++++ b/arcs/gadget/gadget_voice.c
+@@ -71,6 +71,7 @@
+  * is append-only until the uploader has relinquished it. */
+ static SemaphoreHandle_t s_lock;
+ static impo_arcs_voice_config_t s_config = { false, 1200 };
++static uint32_t s_tail_keep_ms; /* opt-in, batch only; never edit published overlap data */
+ static bool s_reply_incremental;
+ static impo_arcs_voice_snapshot_t s_stats;
+ static uint8_t *s_recording;
+@@ -429,6 +430,7 @@
+     s_stats.turn_epoch = ++s_epoch;
+     s_stats.session_epoch = s_session_epoch;
+     s_stats.upload_overlap = s_config.upload_overlap;
++    s_stats.tail_keep_ms = s_tail_keep_ms;
+     s_stats.phase = IMPO_VOICE_LISTENING;
+     s_active = true;
+     s_finished = false;
+@@ -489,6 +491,7 @@
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+     mark_locked(IMPO_VOICE_CAPTURE_END);
+     s_stats.pcm_bytes = (uint32_t)(recorded - sizeof(WAV_HEAD));
++    s_stats.captured_pcm_bytes = s_stats.pcm_bytes;
+     s_stats.mic_dropped_bytes = s_mic_dropped;
+     s_stats.capture_end_backlog_bytes = (uint32_t)(recorded - s_uploaded);
+     xSemaphoreGive(s_lock);
+@@ -516,6 +519,18 @@
+     }
+     xSemaphoreTake(s_lock, portMAX_DELAY);
+     if (!s_config.upload_overlap) {
++        /* Only a normal silence endpoint is trimmable. Keep all pre-roll,
++         * internal pauses and the configured margin after the last loud frame.
++         * No uploader owns the buffer before batch seals it below. */
++        if (vr == GADGET_VAD_PAUSE && s_tail_keep_ms && vad.quiet_ms > s_tail_keep_ms) {
++            size_t trim = (size_t)(vad.quiet_ms - s_tail_keep_ms) * GADGET_SOUND_RATE / 1000u * sizeof(int16_t);
++            if (trim < recorded - sizeof(WAV_HEAD)) recorded -= trim;
++        }
++        s_published = recorded;
++        s_stats.captured_pcm_bytes = s_stats.pcm_bytes;
++        s_stats.pcm_bytes = (uint32_t)(recorded - sizeof(WAV_HEAD));
++        s_stats.trimmed_pcm_bytes = s_stats.captured_pcm_bytes - s_stats.pcm_bytes;
++        s_stats.capture_end_backlog_bytes = (uint32_t)(recorded - s_uploaded);
+         uint32_t pcm_size = (uint32_t)(recorded - sizeof(WAV_HEAD));
+         for (unsigned i = 0; i < 4; i++) {
+             s_recording[4+i] = (uint8_t)((pcm_size+36u) >> (8u*i));
+@@ -708,6 +723,9 @@
+         p->final_prefix_matches, p->final_equals_appends, (unsigned)p->errors);
+     LISA_LOGI(TAG, "voice_capture_turn epoch=%u last_voice=%llu",
+         (unsigned)stats.turn_epoch, (unsigned long long)stats.stage_ms[IMPO_VOICE_LAST_VOICE]);
++    LISA_LOGI(TAG, "voice_tail epoch=%u keep_ms=%u captured=%u trimmed=%u",
++        (unsigned)stats.turn_epoch, (unsigned)stats.tail_keep_ms,
++        (unsigned)stats.captured_pcm_bytes, (unsigned)stats.trimmed_pcm_bytes);
+     s_followup = test == NULL && s_session && complete && !s_stop && !s_interrupt;
+     if (!s_followup) {
+         end_turn(true);
+@@ -815,7 +833,18 @@
+     if (!config || config->endpoint_pause_ms < 600 || config->endpoint_pause_ms > 2000) return -1;
+     if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+     bool busy = s_state != GADGET_VOICE_IDLE || s_active || s_upload_running || s_upload_pending || s_session;
++    busy |= config->upload_overlap && s_tail_keep_ms != 0;
+     if (!busy) s_config = *config;
++    if (s_lock) xSemaphoreGive(s_lock);
++    return busy ? -1 : 0;
++}
++int gadget_voice_tail_configure(uint32_t keep_ms)
++{
++    if (keep_ms && (keep_ms < 200 || keep_ms > 1000)) return -1;
++    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
++    bool busy = s_state != GADGET_VOICE_IDLE || s_active || s_upload_running || s_upload_pending || s_session;
++    busy |= keep_ms && s_config.upload_overlap;
++    if (!busy) s_tail_keep_ms = keep_ms;
+     if (s_lock) xSemaphoreGive(s_lock);
+     return busy ? -1 : 0;
+ }
+--- a/arcs/gadget/gadget_voice.h
++++ b/arcs/gadget/gadget_voice.h
+@@ -18,6 +18,7 @@
+ 
+ int gadget_voice_start(void);
+ int gadget_voice_reply_configure(bool incremental);
++int gadget_voice_tail_configure(uint32_t keep_ms);
+ int gadget_voice_configure(const impo_arcs_voice_config_t *config);
+ void gadget_voice_snapshot(impo_arcs_voice_snapshot_t *out);
+ /* Idle: start listening. Listening: stop now. Replying: interrupt and listen again. Any task. */

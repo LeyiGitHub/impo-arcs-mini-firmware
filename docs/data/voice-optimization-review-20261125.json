@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "source": "reply-stream-20261125-coalesced-validation.json",
+  "installed_image": {
+    "image_sha256": "e54675a9442d8056c4a59ddba317fb9ec56326a17b99fdcedf540c8c2edc29cd",
+    "image_bytes": 1876904,
+    "product": "arcs-mini2-playback",
+    "listenai_sdk_version": "0.1.8",
+    "wake_bundle": "xiaozhou-single-mic"
+  },
+  "metric": "Offline chain review; measured intervals and explicitly hypothetical optimizations",
+  "observed_default_reply_mode": "full",
+  "observed_default_upload_mode": "batch",
+  "example": {
+    "run": 5,
+    "reply_mode": "full",
+    "device_intervals_ms": {
+      "endpoint": 1187,
+      "capture_to_ack": 3971,
+      "ack_to_first_append": 4808,
+      "first_append_to_final": 1486,
+      "final_to_tts_submit": 89,
+      "tts_submit_to_body": 4506,
+      "body_to_pcm": 5,
+      "pcm_to_driver": 319
+    },
+    "device_total_ms": 16371,
+    "acoustic_gap_ms": 16593
+  },
+  "ranges_ms": {
+    "ack_to_first_append": [
+      4563,
+      5790
+    ],
+    "first_append_to_final": [
+      555,
+      1974
+    ]
+  },
+  "hypothetical_tail_trim": {
+    "status": "not implemented or measured",
+    "endpoint_ms_unchanged": 1200,
+    "retained_tail_ms": 200,
+    "removed_pcm_ms": 1000,
+    "removed_pcm_bytes": 32000,
+    "removed_base64_characters_approx": 42667,
+    "example_audio_reduction_percent": 15.24,
+    "wall_clock_gain_ms": null
+  },
+  "continuous_turn_wait": {
+    "code_quiet_ms": 3000,
+    "candidate_quiet_ms": 500,
+    "conditional_fixed_wait_reduction_ms": 2500,
+    "requires_turn_completion_or_late_reply_policy": true,
+    "first_answer_latency_gain_ms": 0
+  },
+  "production_or_firmware_changes_in_this_review": false
+}
